@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 HARTREE_TO_EV = 27.211386245988
+FREQUENCY_ZERO_THRESHOLD_CM = 10.0
 
 COLUMNS = [
     "calculation_name",
@@ -139,11 +140,16 @@ def frequency_status(freqs: List[float]) -> Tuple[str, str, str]:
     """Возвращает has_imaginary, count, lowest_frequency.
 
     Пустая строка означает, что Freq не был найден, например для stage1 Opt.
+    Нулевые/почти нулевые трансляционно-вращательные моды не учитываются
+    при выборе lowest_frequency_cm-1 и при подсчете мнимых вибрационных мод.
     """
     if not freqs:
         return "", "", ""
-    negative = [f for f in freqs if f < -1.0]  # небольшой порог против численного шума около нуля
-    lowest = min(freqs)
+    vibrational = [f for f in freqs if abs(f) > FREQUENCY_ZERO_THRESHOLD_CM]
+    if not vibrational:
+        return "", "", ""
+    negative = [f for f in vibrational if f < -FREQUENCY_ZERO_THRESHOLD_CM]
+    lowest = min(vibrational)
     has_imag = bool(negative)
     return str(has_imag), str(len(negative)), f"{lowest:.6f}"
 
