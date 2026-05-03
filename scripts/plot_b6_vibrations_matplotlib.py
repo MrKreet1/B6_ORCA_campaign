@@ -14,6 +14,58 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 
+FIGURE_ORDER = [
+    (
+        "Figure_10_B6_vibrational_frequencies",
+        "Figure 10. B6 Vibrational Frequencies",
+        "Bar chart of all 12 non-zero normal-mode frequencies from B6_all_vibrational_frequencies.csv.",
+    ),
+    (
+        "Figure_11_B6_max_amplitude_by_mode",
+        "Figure 11. Maximum Amplitude By Mode",
+        "Maximum normalized normal-mode displacement amplitude and dominant atom label for each mode.",
+    ),
+    (
+        "Figure_12_B6_frequency_vs_amplitude",
+        "Figure 12. Frequency Vs Maximum Amplitude",
+        "Scatter plot for checking whether higher-frequency modes show systematically different displacement amplitudes.",
+    ),
+    (
+        "Figure_13_B6_atom_participation_heatmap",
+        "Figure 13. Atom Participation Heatmap",
+        "Heatmap of atom-by-mode displacement amplitudes from B6_normal_mode_amplitudes.csv.",
+    ),
+    (
+        "Figure_14_B6_dominant_atom_by_mode",
+        "Figure 14. Dominant Atom By Mode",
+        "Dominant atom index for every normal mode, based on the largest normalized displacement amplitude.",
+    ),
+    (
+        "Figure_15_B6_frequency_distribution",
+        "Figure 15. Frequency Distribution",
+        "Histogram showing how B6 vibrational modes are distributed across low, medium, and high frequency ranges.",
+    ),
+    (
+        "Figure_16_final_relative_energies_labeled",
+        "Figure 16. Final Relative Energies",
+        "Final PBE0-D4/def2-TZVP candidate energies by rank, with multiplicity labels and the best_B6 marker.",
+    ),
+    (
+        "Figure_17_screening_success_rate",
+        "Figure 17. Screening Success Rate",
+        "Successful versus failed/not-normal R2SCAN-3C screening calculations.",
+    ),
+    (
+        "B6_vibrational_spectrum_lines",
+        "Supplement. Frequency Line Spectrum",
+        "Line-spectrum representation of the same non-zero vibrational frequencies.",
+    ),
+]
+
+
+def html_escape(text: object) -> str:
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
 
 def read_csv_rows(path: Path) -> List[Dict[str, str]]:
     with path.open("r", encoding="utf-8", newline="") as f:
@@ -251,6 +303,161 @@ def write_manifest(output_dir: Path, files: Sequence[Tuple[Path, str]]) -> None:
             writer.writerow([path.name, description])
 
 
+def write_gallery_page(output_dir: Path) -> Path:
+    page = output_dir / "index.html"
+    cards: List[str] = []
+    for stem, title, description in FIGURE_ORDER:
+        svg = f"{stem}.svg"
+        png = f"{stem}.png"
+        if not (output_dir / svg).exists():
+            continue
+        cards.append(
+            f"""
+      <article class="plot">
+        <header>
+          <h2>{html_escape(title)}</h2>
+          <p>{html_escape(description)}</p>
+          <div class="links">
+            <a href="{html_escape(svg)}">SVG</a>
+            <a href="{html_escape(png)}">PNG</a>
+          </div>
+        </header>
+        <a class="image-link" href="{html_escape(svg)}">
+          <img src="{html_escape(svg)}" alt="{html_escape(title)}">
+        </a>
+      </article>"""
+        )
+
+    content = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>B6 Matplotlib Graph Gallery</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      font-family: Arial, sans-serif;
+      background: #f5f7f7;
+      color: #1f2727;
+    }}
+    body {{
+      margin: 0;
+      background: #f5f7f7;
+    }}
+    .topbar {{
+      background: #ffffff;
+      border-bottom: 1px solid #d8dfdf;
+      padding: 18px 24px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }}
+    h1 {{
+      margin: 0 0 8px;
+      font-size: 24px;
+      line-height: 1.2;
+    }}
+    .summary {{
+      margin: 0;
+      color: #586464;
+      font-size: 14px;
+      line-height: 1.45;
+    }}
+    .nav {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }}
+    a {{
+      color: #23676a;
+      text-decoration: none;
+    }}
+    a:hover {{
+      text-decoration: underline;
+    }}
+    .nav a, .links a {{
+      border: 1px solid #b9c9c9;
+      border-radius: 6px;
+      padding: 6px 9px;
+      background: #f9fbfb;
+      font-size: 13px;
+    }}
+    main {{
+      max-width: 1260px;
+      margin: 0 auto;
+      padding: 18px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(430px, 1fr));
+      gap: 16px;
+    }}
+    .plot {{
+      background: #ffffff;
+      border: 1px solid #d7dfdf;
+      border-radius: 8px;
+      overflow: hidden;
+    }}
+    .plot header {{
+      padding: 13px 14px 10px;
+      border-bottom: 1px solid #e4e9e9;
+    }}
+    .plot h2 {{
+      margin: 0 0 6px;
+      font-size: 16px;
+      line-height: 1.25;
+    }}
+    .plot p {{
+      margin: 0;
+      color: #5c6666;
+      font-size: 13px;
+      line-height: 1.45;
+    }}
+    .links {{
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }}
+    .image-link {{
+      display: block;
+      background: #ffffff;
+    }}
+    img {{
+      width: 100%;
+      height: auto;
+      display: block;
+    }}
+    @media (max-width: 520px) {{
+      main {{
+        grid-template-columns: 1fr;
+        padding: 10px;
+      }}
+      .topbar {{
+        padding: 14px;
+      }}
+    }}
+  </style>
+</head>
+<body>
+  <section class="topbar">
+    <h1>B6 Matplotlib Graph Gallery</h1>
+    <p class="summary">Vibrational, normal-mode, final-energy, and screening-status plots generated from the B6 ORCA campaign CSV files.</p>
+    <nav class="nav">
+      <a href="../README.md">Vibration README</a>
+      <a href="../../../../README.md">Main README</a>
+      <a href="plots_manifest.csv">Plot Manifest</a>
+    </nav>
+  </section>
+  <main>
+{''.join(cards)}
+  </main>
+</body>
+</html>
+"""
+    page.write_text(content, encoding="utf-8")
+    return page
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Plot B6 vibrational analysis with Matplotlib.")
     parser.add_argument("--project-dir", default=".")
@@ -303,8 +510,10 @@ def main() -> None:
         manifest_items.append((path, "Supplementary line-spectrum representation of B6 vibrational frequencies."))
 
     write_manifest(output_dir, manifest_items)
+    gallery_page = write_gallery_page(output_dir)
     print(f"Wrote Matplotlib plots to: {output_dir.resolve()}")
     print(f"Wrote manifest: {(output_dir / 'plots_manifest.csv').resolve()}")
+    print(f"Wrote gallery page: {gallery_page.resolve()}")
 
 
 if __name__ == "__main__":

@@ -32,6 +32,10 @@ Matplotlib plots are stored in a separate folder:
 
 [`matplotlib_plots/`](matplotlib_plots/)
 
+Graph gallery page:
+
+[matplotlib_plots/index.html](matplotlib_plots/index.html)
+
 | Figure | Plot | Source file | What it shows |
 |---|---|---|---|
 | Figure 10 | [Figure_10_B6_vibrational_frequencies.svg](matplotlib_plots/Figure_10_B6_vibrational_frequencies.svg) | `B6_all_vibrational_frequencies.csv` | Bar chart of all 12 non-zero B6 vibrational frequencies |
