@@ -16,6 +16,16 @@
 
 Численные энергии и частоты в этом пакете не заданы и не выдумываются.
 
+## Отчёты и результаты
+
+- [Итоговый отчёт Markdown](results/B6_final_report.md)
+- [Итоговый отчёт TXT](results/B6_final_report.txt)
+- [Screening-таблица](results/results.csv)
+- [Финальная таблица](results/final_results.csv)
+- [Все энергии](results/all_energies.csv)
+- [Лучшая структура best_B6.xyz](results/best_B6.xyz)
+- [Рисунки отчёта](results/figures/)
+
 ---
 
 ## 1. Требования
