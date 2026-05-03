@@ -458,6 +458,55 @@ def write_gallery_page(output_dir: Path) -> Path:
     return page
 
 
+def write_gallery_markdown_page(output_dir: Path) -> Path:
+    page = output_dir / "README.md"
+    lines = [
+        "# B6 Matplotlib Graph Gallery",
+        "",
+        "[← Vibration README](../README.md) | [Main project README](../../../../README.md) | [Plot manifest](plots_manifest.csv)",
+        "",
+        "This page collects Matplotlib plots generated from the B6 ORCA campaign vibration, final-energy, and screening CSV files.",
+        "",
+    ]
+    for stem, title, description in FIGURE_ORDER:
+        svg = f"{stem}.svg"
+        png = f"{stem}.png"
+        if not (output_dir / svg).exists():
+            continue
+        lines.extend(
+            [
+                f"## {title}",
+                "",
+                description,
+                "",
+                f"[SVG]({svg}) | [PNG]({png})",
+                "",
+                f"![{title}]({svg})",
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            "## Regeneration",
+            "",
+            "Run from the repository root:",
+            "",
+            "```bash",
+            "python3 scripts/plot_b6_vibrations_matplotlib.py \\",
+            "  --project-dir . \\",
+            "  --input-dir results/vibrations/B6 \\",
+            "  --output-dir results/vibrations/B6/matplotlib_plots \\",
+            "  --final-csv results/final_results.csv \\",
+            "  --screening-csv results/results.csv",
+            "```",
+            "",
+        ]
+    )
+    page.write_text("\n".join(lines), encoding="utf-8")
+    return page
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Plot B6 vibrational analysis with Matplotlib.")
     parser.add_argument("--project-dir", default=".")
@@ -511,9 +560,11 @@ def main() -> None:
 
     write_manifest(output_dir, manifest_items)
     gallery_page = write_gallery_page(output_dir)
+    gallery_markdown = write_gallery_markdown_page(output_dir)
     print(f"Wrote Matplotlib plots to: {output_dir.resolve()}")
     print(f"Wrote manifest: {(output_dir / 'plots_manifest.csv').resolve()}")
     print(f"Wrote gallery page: {gallery_page.resolve()}")
+    print(f"Wrote markdown gallery: {gallery_markdown.resolve()}")
 
 
 if __name__ == "__main__":

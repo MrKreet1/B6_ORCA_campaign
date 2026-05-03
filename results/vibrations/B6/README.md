@@ -34,6 +34,10 @@ Matplotlib plots are stored in a separate folder:
 
 Graph gallery page:
 
+[matplotlib_plots/README.md](matplotlib_plots/README.md)
+
+HTML version:
+
 [matplotlib_plots/index.html](matplotlib_plots/index.html)
 
 | Figure | Plot | Source file | What it shows |
