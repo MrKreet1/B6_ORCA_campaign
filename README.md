@@ -49,6 +49,12 @@
 
 ![minimum energy final geometries](results/figures/Figure_6_min_energy_geometries.svg)
 
+3D-проекция лучших финальных геометрий:
+
+![3D minimum energy final geometries](results/figures/Figure_7_min_energy_geometries_3d.svg)
+
+Интерактивная 3D-версия для вращения мышью: [Figure_7_min_energy_geometries_3d.html](results/figures/Figure_7_min_energy_geometries_3d.html)
+
 ---
 
 ## Воспроизводимость

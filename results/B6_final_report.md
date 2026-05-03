@@ -218,6 +218,7 @@ end
 
 Рисунок 5: `results/figures/Figure_5_final_relative_energies.svg`.
 Рисунок 6: `results/figures/Figure_6_min_energy_geometries.svg` - визуализация 10 финальных оптимизированных геометрий с минимальной энергией.
+Рисунок 7: `results/figures/Figure_7_min_energy_geometries_3d.svg` - статическая 3D-проекция тех же низкоэнергетических структур; интерактивная версия для вращения мышью сохранена в `results/figures/Figure_7_min_energy_geometries_3d.html`.
 
 ## 9. Частотный анализ
 Структура считалась истинным минимумом только при одновременном выполнении трех условий: `ORCA TERMINATED NORMALLY`, сходимость оптимизации и отсутствие мнимых частот. Если структура имеет хотя бы одну мнимую частоту, она не считается финальным минимумом даже при низкой электронной энергии.
@@ -303,6 +304,8 @@ end
 - `calculations/final/*/*.out`: ORCA output-файлы финальных расчетов.
 - `results/figures/Figure_4_best_B6.svg`: изображение финальной структуры.
 - `results/figures/Figure_6_min_energy_geometries.svg`: визуализация низкоэнергетических финальных геометрий.
+- `results/figures/Figure_7_min_energy_geometries_3d.svg`: статическая 3D-проекция низкоэнергетических финальных геометрий.
+- `results/figures/Figure_7_min_energy_geometries_3d.html`: интерактивная 3D-визуализация с вращением мышью.
 
 ### 13.1. Команды воспроизведения обработки данных
 Ниже приведены команды, которые не запускают новые квантово-химические расчёты, а только пересобирают таблицы и отчёт из уже существующих ORCA output-файлов.
@@ -395,6 +398,8 @@ B   2.70000000   0.51961524   0.48989795
 | results/B6_final_report.txt | текстовая копия отчёта |
 | results/figures/*.svg | схемы workflow, геометрий и графики энергий |
 | results/figures/Figure_6_min_energy_geometries.svg | топ финальных оптимизированных геометрий по энергии |
+| results/figures/Figure_7_min_energy_geometries_3d.svg | статическая 3D-проекция топовых финальных геометрий |
+| results/figures/Figure_7_min_energy_geometries_3d.html | интерактивная 3D-визуализация топовых финальных геометрий |
 
 ## Литература
 [1] J. Burkhardt, Y. Jia, W.-L. Li. Structure Search with the Strategic Escape Algorithm. Journal of Chemical Theory and Computation, 2025, 21, 3765-3773. DOI: https://doi.org/10.1021/acs.jctc.4c01746

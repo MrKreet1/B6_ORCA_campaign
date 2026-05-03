@@ -7,6 +7,7 @@ import argparse
 from collections import Counter
 import csv
 import importlib.util
+import json
 import math
 import re
 from pathlib import Path
@@ -420,6 +421,59 @@ def atoms_svg(atoms: Sequence[Atom], width: int = 360, height: int = 300, title:
     return "\n".join(lines)
 
 
+def rotate_for_3d(coord: Tuple[float, float, float], yaw: float = -0.65, pitch: float = 0.78) -> Tuple[float, float, float]:
+    x, y, z = coord
+    cy, sy = math.cos(yaw), math.sin(yaw)
+    cp, sp = math.cos(pitch), math.sin(pitch)
+    x1 = x * cy + z * sy
+    z1 = -x * sy + z * cy
+    y1 = y * cp - z1 * sp
+    z2 = y * sp + z1 * cp
+    return x1, y1, z2
+
+
+def atoms_svg_3d(atoms: Sequence[Atom], width: int = 360, height: int = 300, title: str = "") -> str:
+    coords = [(x, y, z) for _, x, y, z in atoms]
+    center = [sum(coord[i] for coord in coords) / len(coords) for i in range(3)]
+    rotated = [rotate_for_3d((x - center[0], y - center[1], z - center[2])) for x, y, z in coords]
+    scaled = scaled_points(rotated, width, height, 36)
+    pairs = pair_distances(atoms)
+    min_d = min((d for _, _, d in pairs), default=1.7)
+    cutoff = min(2.25, max(1.75, min_d * 1.28))
+    z_values = [p[2] for p in scaled]
+    zmin, zmax = min(z_values), max(z_values)
+    zspan = zmax - zmin + 1e-6
+
+    lines = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        '<rect width="100%" height="100%" fill="#ffffff"/>',
+    ]
+    if title:
+        lines.append(f'<text x="16" y="24" font-family="Arial" font-size="15" font-weight="700" fill="#222">{html(title)}</text>')
+
+    bond_items = []
+    for i, j, d in pairs:
+        if d <= cutoff:
+            bond_items.append((scaled[i][2] + scaled[j][2], i, j, d))
+    for _, i, j, _ in sorted(bond_items):
+        x1, y1, z1 = scaled[i]
+        x2, y2, z2 = scaled[j]
+        depth = ((z1 + z2) / 2.0 - zmin) / zspan
+        stroke = 1.6 + 1.4 * depth
+        shade = int(150 - 58 * depth)
+        lines.append(f'<line x1="{x1:.2f}" y1="{y1:.2f}" x2="{x2:.2f}" y2="{y2:.2f}" stroke="rgb({shade},{shade},{shade})" stroke-width="{stroke:.2f}" stroke-linecap="round"/>')
+
+    for idx in sorted(range(len(scaled)), key=lambda atom_idx: scaled[atom_idx][2]):
+        x, y, z = scaled[idx]
+        depth = (z - zmin) / zspan
+        radius = 9.5 + 5.2 * depth
+        fill = int(115 + 52 * depth)
+        lines.append(f'<circle cx="{x:.2f}" cy="{y:.2f}" r="{radius:.2f}" fill="rgb(58,{fill},{fill})" stroke="#1f4142" stroke-width="1.5"/>')
+        lines.append(f'<text x="{x:.2f}" y="{y + 3.8:.2f}" text-anchor="middle" font-family="Arial" font-size="9" fill="#ffffff">B</text>')
+    lines.append("</svg>")
+    return "\n".join(lines)
+
+
 def write_workflow_svg(path: Path) -> None:
     width, height = 1060, 210
     labels = [
@@ -542,6 +596,239 @@ def write_min_energy_geometries_svg(path: Path, final_rows: Sequence[Dict[str, s
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def write_min_energy_geometries_3d_svg(path: Path, final_rows: Sequence[Dict[str, str]], project: Path, limit: int = 10) -> None:
+    shown = list(final_rows[:limit])
+    cols = 5 if len(shown) > 4 else max(1, len(shown))
+    rows = max(1, math.ceil(len(shown) / cols))
+    cell_w, cell_h = 300, 255
+    width, height = cell_w * cols, cell_h * rows + 42
+    lines = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        '<rect width="100%" height="100%" fill="#ffffff"/>',
+        '<text x="20" y="28" font-family="Arial" font-size="18" font-weight="700" fill="#222">3D-проекция минимально-энергетических геометрий B6</text>',
+    ]
+
+    for idx, row in enumerate(shown):
+        col, grid_row = idx % cols, idx // cols
+        x0, y0 = col * cell_w, 42 + grid_row * cell_h
+        calc_label = short_name(row.get("calculation_name", ""), 34)
+        rel = row.get("relative_energy_ev", "")
+        mult = row.get("multiplicity", "")
+        freq = row.get("lowest_frequency_cm-1", "")
+        source = row.get("geometry_type", "")
+
+        lines.append(f'<g transform="translate({x0},{y0})">')
+        lines.append(f'<text x="12" y="18" font-family="Arial" font-size="13" font-weight="700" fill="#222">#{idx + 1} {html(calc_label)}</text>')
+        lines.append(f'<text x="12" y="36" font-family="Arial" font-size="12" fill="#333">m={html(mult)}  ΔE={html(rel)} eV  νmin={html(freq)} cm⁻¹</text>')
+        lines.append(f'<text x="12" y="53" font-family="Arial" font-size="11" fill="#666">source: {html(source)}</text>')
+
+        xyz_path = resolve_project_path(row.get("xyz_file", ""), project)
+        if xyz_path.exists():
+            atoms = read_xyz(xyz_path)
+            frag = atoms_svg_3d(atoms, cell_w, cell_h - 62, "")
+            inner = "\n".join(frag.splitlines()[2:-1])
+            lines.append(f'<g transform="translate(0,58)">{inner}</g>')
+        else:
+            lines.append(f'<text x="{cell_w / 2}" y="{cell_h / 2}" text-anchor="middle" font-family="Arial" font-size="13" fill="#9a2d2d">XYZ not found</text>')
+        lines.append("</g>")
+
+    lines.append("</svg>")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def write_min_energy_geometries_3d_html(path: Path, final_rows: Sequence[Dict[str, str]], project: Path, limit: int = 10) -> None:
+    structures: List[Dict[str, object]] = []
+    for idx, row in enumerate(final_rows[:limit], start=1):
+        xyz_path = resolve_project_path(row.get("xyz_file", ""), project)
+        if not xyz_path.exists():
+            continue
+        atoms = read_xyz(xyz_path)
+        structures.append(
+            {
+                "rank": idx,
+                "name": short_name(row.get("calculation_name", ""), 48),
+                "source": row.get("geometry_type", ""),
+                "multiplicity": row.get("multiplicity", ""),
+                "relative_energy_ev": row.get("relative_energy_ev", ""),
+                "lowest_frequency": row.get("lowest_frequency_cm-1", ""),
+                "atoms": [{"el": el, "x": x, "y": y, "z": z} for el, x, y, z in atoms],
+            }
+        )
+
+    data = json.dumps(structures, ensure_ascii=False)
+    html_doc = """<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>3D B6 minimum-energy geometries</title>
+  <style>
+    :root { color-scheme: light; font-family: Arial, sans-serif; }
+    body { margin: 0; background: #f6f7f7; color: #1f2727; }
+    header { padding: 18px 24px 10px; background: #fff; border-bottom: 1px solid #d9dddd; }
+    h1 { margin: 0 0 6px; font-size: 22px; }
+    p { margin: 0; color: #5b6565; font-size: 14px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; padding: 16px; }
+    .card { background: #fff; border: 1px solid #d8dfdf; border-radius: 8px; overflow: hidden; }
+    .meta { padding: 10px 12px; border-bottom: 1px solid #e5e9e9; }
+    .title { font-weight: 700; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sub { color: #596464; font-size: 12px; margin-top: 4px; line-height: 1.35; }
+    canvas { width: 100%; height: 280px; display: block; background: #fff; cursor: grab; }
+    canvas:active { cursor: grabbing; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>3D-визуализация низкоэнергетических финальных геометрий B6</h1>
+    <p>Перетащите мышью для вращения; колесо мыши меняет масштаб. Все структуры отсортированы по PBE0-D4/def2-TZVP энергии.</p>
+  </header>
+  <main class="grid" id="grid"></main>
+  <script>
+    const structures = """ + data + """;
+
+    function pairDistances(atoms) {
+      const pairs = [];
+      for (let i = 0; i < atoms.length; i++) {
+        for (let j = i + 1; j < atoms.length; j++) {
+          const a = atoms[i], b = atoms[j];
+          const d = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+          pairs.push([i, j, d]);
+        }
+      }
+      return pairs;
+    }
+
+    function centerAtoms(atoms) {
+      const c = atoms.reduce((acc, atom) => {
+        acc.x += atom.x; acc.y += atom.y; acc.z += atom.z;
+        return acc;
+      }, {x: 0, y: 0, z: 0});
+      c.x /= atoms.length; c.y /= atoms.length; c.z /= atoms.length;
+      return atoms.map(atom => ({...atom, x: atom.x - c.x, y: atom.y - c.y, z: atom.z - c.z}));
+    }
+
+    function rotate(atom, yaw, pitch) {
+      const cy = Math.cos(yaw), sy = Math.sin(yaw);
+      const cp = Math.cos(pitch), sp = Math.sin(pitch);
+      const x1 = atom.x * cy + atom.z * sy;
+      const z1 = -atom.x * sy + atom.z * cy;
+      const y1 = atom.y * cp - z1 * sp;
+      const z2 = atom.y * sp + z1 * cp;
+      return {el: atom.el, x: x1, y: y1, z: z2};
+    }
+
+    function draw(canvas, structure, state) {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      const w = Math.max(1, Math.floor(rect.width * dpr));
+      const h = Math.max(1, Math.floor(rect.height * dpr));
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w; canvas.height = h;
+      }
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, rect.width, rect.height);
+
+      const centered = centerAtoms(structure.atoms);
+      const rotated = centered.map(atom => rotate(atom, state.yaw, state.pitch));
+      const xs = rotated.map(a => a.x), ys = rotated.map(a => a.y), zs = rotated.map(a => a.z);
+      const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 1e-6);
+      const scale = Math.min(rect.width - 58, rect.height - 46) / span * state.zoom;
+      const zmin = Math.min(...zs), zmax = Math.max(...zs), zspan = zmax - zmin + 1e-6;
+      const projected = rotated.map(atom => ({
+        ...atom,
+        sx: rect.width / 2 + atom.x * scale,
+        sy: rect.height / 2 - atom.y * scale,
+        depth: (atom.z - zmin) / zspan
+      }));
+
+      const pairs = pairDistances(centered);
+      const minD = Math.min(...pairs.map(p => p[2]));
+      const cutoff = Math.min(2.25, Math.max(1.75, minD * 1.28));
+      const bonds = pairs
+        .filter(p => p[2] <= cutoff)
+        .map(p => ({i: p[0], j: p[1], z: projected[p[0]].depth + projected[p[1]].depth}))
+        .sort((a, b) => a.z - b.z);
+
+      ctx.lineCap = "round";
+      for (const bond of bonds) {
+        const a = projected[bond.i], b = projected[bond.j];
+        const depth = (a.depth + b.depth) / 2;
+        const shade = Math.round(150 - 58 * depth);
+        ctx.strokeStyle = `rgb(${shade}, ${shade}, ${shade})`;
+        ctx.lineWidth = 2 + 2.2 * depth;
+        ctx.beginPath();
+        ctx.moveTo(a.sx, a.sy);
+        ctx.lineTo(b.sx, b.sy);
+        ctx.stroke();
+      }
+
+      const atoms = projected.slice().sort((a, b) => a.depth - b.depth);
+      for (const atom of atoms) {
+        const r = 13 + 7 * atom.depth;
+        const fill = Math.round(116 + 55 * atom.depth);
+        const grad = ctx.createRadialGradient(atom.sx - r * 0.35, atom.sy - r * 0.35, r * 0.2, atom.sx, atom.sy, r);
+        grad.addColorStop(0, `rgb(132, ${Math.min(220, fill + 48)}, ${Math.min(220, fill + 48)})`);
+        grad.addColorStop(1, `rgb(48, ${fill}, ${fill})`);
+        ctx.fillStyle = grad;
+        ctx.strokeStyle = "#1f4142";
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(atom.sx, atom.sy, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#fff";
+        ctx.font = "11px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(atom.el, atom.sx, atom.sy + 0.5);
+      }
+    }
+
+    function setupCard(structure) {
+      const card = document.createElement("section");
+      card.className = "card";
+      card.innerHTML = `
+        <div class="meta">
+          <div class="title">#${structure.rank} ${structure.name}</div>
+          <div class="sub">m=${structure.multiplicity} · ΔE=${structure.relative_energy_ev} eV · νmin=${structure.lowest_frequency} cm⁻¹<br>source: ${structure.source}</div>
+        </div>
+        <canvas></canvas>
+      `;
+      const canvas = card.querySelector("canvas");
+      const state = {yaw: -0.7, pitch: 0.75, zoom: 0.86, dragging: false, lastX: 0, lastY: 0};
+      canvas.addEventListener("pointerdown", event => {
+        state.dragging = true; state.lastX = event.clientX; state.lastY = event.clientY; canvas.setPointerCapture(event.pointerId);
+      });
+      canvas.addEventListener("pointermove", event => {
+        if (!state.dragging) return;
+        const dx = event.clientX - state.lastX, dy = event.clientY - state.lastY;
+        state.lastX = event.clientX; state.lastY = event.clientY;
+        state.yaw += dx * 0.01; state.pitch += dy * 0.01;
+        state.pitch = Math.max(-1.45, Math.min(1.45, state.pitch));
+        draw(canvas, structure, state);
+      });
+      canvas.addEventListener("pointerup", () => { state.dragging = false; });
+      canvas.addEventListener("wheel", event => {
+        event.preventDefault();
+        state.zoom *= event.deltaY > 0 ? 0.92 : 1.08;
+        state.zoom = Math.max(0.45, Math.min(2.5, state.zoom));
+        draw(canvas, structure, state);
+      }, {passive: false});
+      requestAnimationFrame(() => draw(canvas, structure, state));
+      window.addEventListener("resize", () => draw(canvas, structure, state));
+      return card;
+    }
+
+    const grid = document.getElementById("grid");
+    structures.forEach(structure => grid.appendChild(setupCard(structure)));
+  </script>
+</body>
+</html>
+"""
+    path.write_text(html_doc, encoding="utf-8")
+
+
 def write_figures(project: Path, fig_dir: Path, screening_rows: Sequence[Dict[str, str]], final_rows: Sequence[Dict[str, str]], best_atoms: Sequence[Atom]) -> Dict[str, Path]:
     fig_dir.mkdir(parents=True, exist_ok=True)
     figures = {
@@ -551,6 +838,8 @@ def write_figures(project: Path, fig_dir: Path, screening_rows: Sequence[Dict[st
         "best": fig_dir / "Figure_4_best_B6.svg",
         "final": fig_dir / "Figure_5_final_relative_energies.svg",
         "min_geometries": fig_dir / "Figure_6_min_energy_geometries.svg",
+        "min_geometries_3d_svg": fig_dir / "Figure_7_min_energy_geometries_3d.svg",
+        "min_geometries_3d_html": fig_dir / "Figure_7_min_energy_geometries_3d.html",
     }
     write_workflow_svg(figures["workflow"])
     write_start_geometries_svg(figures["starts"], project)
@@ -558,6 +847,8 @@ def write_figures(project: Path, fig_dir: Path, screening_rows: Sequence[Dict[st
     figures["best"].write_text(atoms_svg(best_atoms, 520, 420, "best_B6.xyz"), encoding="utf-8")
     write_bar_svg(figures["final"], final_rows, "Относительные энергии финальных кандидатов", limit=10)
     write_min_energy_geometries_svg(figures["min_geometries"], final_rows, project, limit=10)
+    write_min_energy_geometries_3d_svg(figures["min_geometries_3d_svg"], final_rows, project, limit=10)
+    write_min_energy_geometries_3d_html(figures["min_geometries_3d_html"], final_rows, project, limit=10)
     return figures
 
 
@@ -785,6 +1076,7 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
         "",
         f"Рисунок 5: `{short_path(str(figures['final']), project)}`.",
         f"Рисунок 6: `{short_path(str(figures['min_geometries']), project)}` - визуализация 10 финальных оптимизированных геометрий с минимальной энергией.",
+        f"Рисунок 7: `{short_path(str(figures['min_geometries_3d_svg']), project)}` - статическая 3D-проекция тех же низкоэнергетических структур; интерактивная версия для вращения мышью сохранена в `{short_path(str(figures['min_geometries_3d_html']), project)}`.",
         "",
         "## 9. Частотный анализ",
         "Структура считалась истинным минимумом только при одновременном выполнении трех условий: `ORCA TERMINATED NORMALLY`, сходимость оптимизации и отсутствие мнимых частот. Если структура имеет хотя бы одну мнимую частоту, она не считается финальным минимумом даже при низкой электронной энергии.",
@@ -845,6 +1137,8 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
         f"- `calculations/final/*/*.out`: ORCA output-файлы финальных расчетов.",
         f"- `results/figures/Figure_4_best_B6.svg`: изображение финальной структуры.",
         f"- `results/figures/Figure_6_min_energy_geometries.svg`: визуализация низкоэнергетических финальных геометрий.",
+        f"- `results/figures/Figure_7_min_energy_geometries_3d.svg`: статическая 3D-проекция низкоэнергетических финальных геометрий.",
+        f"- `results/figures/Figure_7_min_energy_geometries_3d.html`: интерактивная 3D-визуализация с вращением мышью.",
         "",
         "### 13.1. Команды воспроизведения обработки данных",
         "Ниже приведены команды, которые не запускают новые квантово-химические расчёты, а только пересобирают таблицы и отчёт из уже существующих ORCA output-файлов.",
@@ -892,6 +1186,8 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
                 ["results/B6_final_report.txt", "текстовая копия отчёта"],
                 ["results/figures/*.svg", "схемы workflow, геометрий и графики энергий"],
                 ["results/figures/Figure_6_min_energy_geometries.svg", "топ финальных оптимизированных геометрий по энергии"],
+                ["results/figures/Figure_7_min_energy_geometries_3d.svg", "статическая 3D-проекция топовых финальных геометрий"],
+                ["results/figures/Figure_7_min_energy_geometries_3d.html", "интерактивная 3D-визуализация топовых финальных геометрий"],
             ],
         ),
         "",
