@@ -45,6 +45,10 @@
 
 ![final relative energies](results/figures/Figure_5_final_relative_energies.svg)
 
+Лучшие финальные геометрические конфигурации с минимальной энергией:
+
+![minimum energy final geometries](results/figures/Figure_6_min_energy_geometries.svg)
+
 ---
 
 ## Воспроизводимость

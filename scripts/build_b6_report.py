@@ -72,15 +72,15 @@ def short_path(path_text: str, project: Path) -> str:
     path = Path(path_text)
     try:
         if path.is_absolute():
-            return str(path.resolve().relative_to(project))
+            return path.resolve().relative_to(project).as_posix()
     except Exception:
         pass
     marker = project.name
     parts = path.parts
     if marker in parts:
         idx = parts.index(marker)
-        return str(Path(*parts[idx + 1 :]))
-    return path_text
+        return Path(*parts[idx + 1 :]).as_posix()
+    return path_text.replace("\\", "/")
 
 
 def resolve_project_path(path_text: str, project: Path) -> Path:
@@ -502,6 +502,46 @@ def write_bar_svg(path: Path, rows: Sequence[Dict[str, str]], title: str, value_
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def write_min_energy_geometries_svg(path: Path, final_rows: Sequence[Dict[str, str]], project: Path, limit: int = 10) -> None:
+    shown = list(final_rows[:limit])
+    cols = 5 if len(shown) > 4 else max(1, len(shown))
+    rows = max(1, math.ceil(len(shown) / cols))
+    cell_w, cell_h = 300, 255
+    width, height = cell_w * cols, cell_h * rows + 42
+    lines = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        '<rect width="100%" height="100%" fill="#ffffff"/>',
+        '<text x="20" y="28" font-family="Arial" font-size="18" font-weight="700" fill="#222">Минимально-энергетические финальные геометрии B6</text>',
+    ]
+
+    for idx, row in enumerate(shown):
+        col, grid_row = idx % cols, idx // cols
+        x0, y0 = col * cell_w, 42 + grid_row * cell_h
+        calc_label = short_name(row.get("calculation_name", ""), 34)
+        rel = row.get("relative_energy_ev", "")
+        mult = row.get("multiplicity", "")
+        freq = row.get("lowest_frequency_cm-1", "")
+        source = row.get("geometry_type", "")
+
+        lines.append(f'<g transform="translate({x0},{y0})">')
+        lines.append(f'<text x="12" y="18" font-family="Arial" font-size="13" font-weight="700" fill="#222">#{idx + 1} {html(calc_label)}</text>')
+        lines.append(f'<text x="12" y="36" font-family="Arial" font-size="12" fill="#333">m={html(mult)}  ΔE={html(rel)} eV  νmin={html(freq)} cm⁻¹</text>')
+        lines.append(f'<text x="12" y="53" font-family="Arial" font-size="11" fill="#666">source: {html(source)}</text>')
+
+        xyz_path = resolve_project_path(row.get("xyz_file", ""), project)
+        if xyz_path.exists():
+            atoms = read_xyz(xyz_path)
+            frag = atoms_svg(atoms, cell_w, cell_h - 62, "", (0, 1))
+            inner = "\n".join(frag.splitlines()[2:-1])
+            lines.append(f'<g transform="translate(0,58)">{inner}</g>')
+        else:
+            lines.append(f'<text x="{cell_w / 2}" y="{cell_h / 2}" text-anchor="middle" font-family="Arial" font-size="13" fill="#9a2d2d">XYZ not found</text>')
+        lines.append("</g>")
+
+    lines.append("</svg>")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def write_figures(project: Path, fig_dir: Path, screening_rows: Sequence[Dict[str, str]], final_rows: Sequence[Dict[str, str]], best_atoms: Sequence[Atom]) -> Dict[str, Path]:
     fig_dir.mkdir(parents=True, exist_ok=True)
     figures = {
@@ -510,12 +550,14 @@ def write_figures(project: Path, fig_dir: Path, screening_rows: Sequence[Dict[st
         "screening": fig_dir / "Figure_3_screening_top10.svg",
         "best": fig_dir / "Figure_4_best_B6.svg",
         "final": fig_dir / "Figure_5_final_relative_energies.svg",
+        "min_geometries": fig_dir / "Figure_6_min_energy_geometries.svg",
     }
     write_workflow_svg(figures["workflow"])
     write_start_geometries_svg(figures["starts"], project)
     write_bar_svg(figures["screening"], screening_rows, "Топ-10 структур после R2SCAN-3C screening", limit=10)
     figures["best"].write_text(atoms_svg(best_atoms, 520, 420, "best_B6.xyz"), encoding="utf-8")
     write_bar_svg(figures["final"], final_rows, "Относительные энергии финальных кандидатов", limit=10)
+    write_min_energy_geometries_svg(figures["min_geometries"], final_rows, project, limit=10)
     return figures
 
 
@@ -742,6 +784,7 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
         ),
         "",
         f"Рисунок 5: `{short_path(str(figures['final']), project)}`.",
+        f"Рисунок 6: `{short_path(str(figures['min_geometries']), project)}` - визуализация 10 финальных оптимизированных геометрий с минимальной энергией.",
         "",
         "## 9. Частотный анализ",
         "Структура считалась истинным минимумом только при одновременном выполнении трех условий: `ORCA TERMINATED NORMALLY`, сходимость оптимизации и отсутствие мнимых частот. Если структура имеет хотя бы одну мнимую частоту, она не считается финальным минимумом даже при низкой электронной энергии.",
@@ -801,6 +844,7 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
         f"- `results/B6_final_report.txt`: текст отчета.",
         f"- `calculations/final/*/*.out`: ORCA output-файлы финальных расчетов.",
         f"- `results/figures/Figure_4_best_B6.svg`: изображение финальной структуры.",
+        f"- `results/figures/Figure_6_min_energy_geometries.svg`: визуализация низкоэнергетических финальных геометрий.",
         "",
         "### 13.1. Команды воспроизведения обработки данных",
         "Ниже приведены команды, которые не запускают новые квантово-химические расчёты, а только пересобирают таблицы и отчёт из уже существующих ORCA output-файлов.",
@@ -847,6 +891,7 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
                 ["results/B6_final_report.md", "подробный отчёт в Markdown"],
                 ["results/B6_final_report.txt", "текстовая копия отчёта"],
                 ["results/figures/*.svg", "схемы workflow, геометрий и графики энергий"],
+                ["results/figures/Figure_6_min_energy_geometries.svg", "топ финальных оптимизированных геометрий по энергии"],
             ],
         ),
         "",
