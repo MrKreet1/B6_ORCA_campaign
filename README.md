@@ -55,6 +55,17 @@
 
 Интерактивная 3D-версия для вращения мышью: [Figure_7_min_energy_geometries_3d.html](results/figures/Figure_7_min_energy_geometries_3d.html)
 
+Отдельно вынесены 3D/random-структуры из расчётной кампании:
+
+- [screening_3d_results.csv](results/screening_3d_results.csv)
+- [final_from_3d_results.csv](results/final_from_3d_results.csv)
+- [3D-стартовые геометрии](results/figures/Figure_8_3d_start_geometries.svg)
+- [финальные структуры из 3D/random стартов, интерактивно](results/figures/Figure_9_final_from_3d_starts_3d.html)
+
+![3D start geometries](results/figures/Figure_8_3d_start_geometries.svg)
+
+![final structures from 3D starts](results/figures/Figure_9_final_from_3d_starts_3d.svg)
+
 ---
 
 ## Воспроизводимость

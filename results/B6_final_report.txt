@@ -220,6 +220,17 @@ end
 Рисунок 6: `results/figures/Figure_6_min_energy_geometries.svg` - визуализация 10 финальных оптимизированных геометрий с минимальной энергией.
 Рисунок 7: `results/figures/Figure_7_min_energy_geometries_3d.svg` - статическая 3D-проекция тех же низкоэнергетических структур; интерактивная версия для вращения мышью сохранена в `results/figures/Figure_7_min_energy_geometries_3d.html`.
 
+### 8.3. Отдельный набор 3D/random структур
+Для отдельного контроля 3D-ветки расчётной кампании выделены строки, у которых `geometry_type` относится к random/3D/призматическим/октаэдрическим/пирамидальным стартам. В screening таких строк: `147`; в финальном OptFreq-наборе: `4`.
+
+Отдельные CSV-файлы для этой части кампании:
+
+- `results/screening_3d_results.csv`: screening-расчёты, начатые из 3D/random геометрий.
+- `results/final_from_3d_results.csv`: финальные OptFreq-расчёты, выбранные из 3D/random стартов.
+
+Рисунок 8: `results/figures/Figure_8_3d_start_geometries.svg` - отдельные 3D-стартовые геометрии B₆.
+Рисунок 9: `results/figures/Figure_9_final_from_3d_starts_3d.svg` - финальные структуры, которые были получены из 3D/random стартов; интерактивная версия сохранена в `results/figures/Figure_9_final_from_3d_starts_3d.html`.
+
 ## 9. Частотный анализ
 Структура считалась истинным минимумом только при одновременном выполнении трех условий: `ORCA TERMINATED NORMALLY`, сходимость оптимизации и отсутствие мнимых частот. Если структура имеет хотя бы одну мнимую частоту, она не считается финальным минимумом даже при низкой электронной энергии.
 
@@ -306,6 +317,11 @@ end
 - `results/figures/Figure_6_min_energy_geometries.svg`: визуализация низкоэнергетических финальных геометрий.
 - `results/figures/Figure_7_min_energy_geometries_3d.svg`: статическая 3D-проекция низкоэнергетических финальных геометрий.
 - `results/figures/Figure_7_min_energy_geometries_3d.html`: интерактивная 3D-визуализация с вращением мышью.
+- `results/screening_3d_results.csv`: отдельная таблица screening-расчётов из 3D/random стартов.
+- `results/final_from_3d_results.csv`: отдельная таблица финальных OptFreq-расчётов из 3D/random стартов.
+- `results/figures/Figure_8_3d_start_geometries.svg`: отдельные 3D-стартовые геометрии.
+- `results/figures/Figure_9_final_from_3d_starts_3d.svg`: 3D-проекция финальных структур из 3D/random стартов.
+- `results/figures/Figure_9_final_from_3d_starts_3d.html`: интерактивная версия финальных структур из 3D/random стартов.
 
 ### 13.1. Команды воспроизведения обработки данных
 Ниже приведены команды, которые не запускают новые квантово-химические расчёты, а только пересобирают таблицы и отчёт из уже существующих ORCA output-файлов.
@@ -400,6 +416,11 @@ B   2.70000000   0.51961524   0.48989795
 | results/figures/Figure_6_min_energy_geometries.svg | топ финальных оптимизированных геометрий по энергии |
 | results/figures/Figure_7_min_energy_geometries_3d.svg | статическая 3D-проекция топовых финальных геометрий |
 | results/figures/Figure_7_min_energy_geometries_3d.html | интерактивная 3D-визуализация топовых финальных геометрий |
+| results/screening_3d_results.csv | отдельная screening-таблица только для 3D/random стартов |
+| results/final_from_3d_results.csv | отдельная final-таблица только для кандидатов из 3D/random стартов |
+| results/figures/Figure_8_3d_start_geometries.svg | отдельные 3D-стартовые геометрии |
+| results/figures/Figure_9_final_from_3d_starts_3d.svg | статическая 3D-проекция финальных структур из 3D/random стартов |
+| results/figures/Figure_9_final_from_3d_starts_3d.html | интерактивная 3D-визуализация финальных структур из 3D/random стартов |
 
 ## Литература
 [1] J. Burkhardt, Y. Jia, W.-L. Li. Structure Search with the Strategic Escape Algorithm. Journal of Chemical Theory and Computation, 2025, 21, 3765-3773. DOI: https://doi.org/10.1021/acs.jctc.4c01746

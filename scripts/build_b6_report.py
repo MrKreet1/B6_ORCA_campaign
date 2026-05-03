@@ -362,6 +362,21 @@ def source_category(geometry_type: str) -> str:
     return "other"
 
 
+def is_3d_geometry(geometry_type: str) -> bool:
+    return source_category(geometry_type) == "3D/random"
+
+
+def write_subset_csv(path: Path, rows: Sequence[Dict[str, str]]) -> None:
+    if not rows:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = list(rows[0].keys())
+    with path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def load_geometry_module(project: Path):
     module_path = project / "scripts" / "generate_b6_inputs.py"
     spec = importlib.util.spec_from_file_location("generate_b6_inputs", module_path)
@@ -596,7 +611,51 @@ def write_min_energy_geometries_svg(path: Path, final_rows: Sequence[Dict[str, s
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def write_min_energy_geometries_3d_svg(path: Path, final_rows: Sequence[Dict[str, str]], project: Path, limit: int = 10) -> None:
+def write_3d_start_geometries_svg(path: Path, project: Path) -> None:
+    gen = load_geometry_module(project)
+    entries = []
+    for name, maker in [
+        ("octahedral_3d", getattr(gen, "octahedral_3d", None)),
+        ("trigonal_prism", getattr(gen, "trigonal_prism", None)),
+        ("pentagonal_pyramid_3d", getattr(gen, "pentagonal_pyramid_3d", None)),
+    ]:
+        if maker is not None:
+            entries.append((name, maker(1.8)))
+    if hasattr(gen, "random_3d"):
+        entries.extend(
+            [
+                ("random_3d_seed1000", gen.random_3d(1.8, 1000)),
+                ("random_3d_seed1001", gen.random_3d(1.8, 1001)),
+                ("random_3d_seed1002", gen.random_3d(1.8, 1002)),
+            ]
+        )
+
+    cols = 3
+    rows = max(1, math.ceil(len(entries) / cols))
+    cell_w, cell_h = 330, 270
+    width, height = cell_w * cols, cell_h * rows + 42
+    lines = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        '<rect width="100%" height="100%" fill="#ffffff"/>',
+        '<text x="20" y="28" font-family="Arial" font-size="18" font-weight="700" fill="#222">Отдельные 3D-стартовые геометрии B6</text>',
+    ]
+    for idx, (title, atoms) in enumerate(entries):
+        col, grid_row = idx % cols, idx // cols
+        x0, y0 = col * cell_w, 42 + grid_row * cell_h
+        frag = atoms_svg_3d(atoms, cell_w, cell_h, title)
+        inner = "\n".join(frag.splitlines()[2:-1])
+        lines.append(f'<g transform="translate({x0},{y0})">{inner}</g>')
+    lines.append("</svg>")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def write_min_energy_geometries_3d_svg(
+    path: Path,
+    final_rows: Sequence[Dict[str, str]],
+    project: Path,
+    limit: int = 10,
+    title: str = "3D-проекция минимально-энергетических геометрий B6",
+) -> None:
     shown = list(final_rows[:limit])
     cols = 5 if len(shown) > 4 else max(1, len(shown))
     rows = max(1, math.ceil(len(shown) / cols))
@@ -605,7 +664,7 @@ def write_min_energy_geometries_3d_svg(path: Path, final_rows: Sequence[Dict[str
     lines = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="#ffffff"/>',
-        '<text x="20" y="28" font-family="Arial" font-size="18" font-weight="700" fill="#222">3D-проекция минимально-энергетических геометрий B6</text>',
+        f'<text x="20" y="28" font-family="Arial" font-size="18" font-weight="700" fill="#222">{html(title)}</text>',
     ]
 
     for idx, row in enumerate(shown):
@@ -636,7 +695,14 @@ def write_min_energy_geometries_3d_svg(path: Path, final_rows: Sequence[Dict[str
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def write_min_energy_geometries_3d_html(path: Path, final_rows: Sequence[Dict[str, str]], project: Path, limit: int = 10) -> None:
+def write_min_energy_geometries_3d_html(
+    path: Path,
+    final_rows: Sequence[Dict[str, str]],
+    project: Path,
+    limit: int = 10,
+    title: str = "3D-визуализация низкоэнергетических финальных геометрий B6",
+    subtitle: str = "Перетащите мышью для вращения; колесо мыши меняет масштаб. Все структуры отсортированы по PBE0-D4/def2-TZVP энергии.",
+) -> None:
     structures: List[Dict[str, object]] = []
     for idx, row in enumerate(final_rows[:limit], start=1):
         xyz_path = resolve_project_path(row.get("xyz_file", ""), project)
@@ -661,7 +727,7 @@ def write_min_energy_geometries_3d_html(path: Path, final_rows: Sequence[Dict[st
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>3D B6 minimum-energy geometries</title>
+  <title>3D B6 geometries</title>
   <style>
     :root { color-scheme: light; font-family: Arial, sans-serif; }
     body { margin: 0; background: #f6f7f7; color: #1f2727; }
@@ -679,8 +745,8 @@ def write_min_energy_geometries_3d_html(path: Path, final_rows: Sequence[Dict[st
 </head>
 <body>
   <header>
-    <h1>3D-визуализация низкоэнергетических финальных геометрий B6</h1>
-    <p>Перетащите мышью для вращения; колесо мыши меняет масштаб. Все структуры отсортированы по PBE0-D4/def2-TZVP энергии.</p>
+    <h1>""" + html(title) + """</h1>
+    <p>""" + html(subtitle) + """</p>
   </header>
   <main class="grid" id="grid"></main>
   <script>
@@ -831,6 +897,7 @@ def write_min_energy_geometries_3d_html(path: Path, final_rows: Sequence[Dict[st
 
 def write_figures(project: Path, fig_dir: Path, screening_rows: Sequence[Dict[str, str]], final_rows: Sequence[Dict[str, str]], best_atoms: Sequence[Atom]) -> Dict[str, Path]:
     fig_dir.mkdir(parents=True, exist_ok=True)
+    final_3d_rows = [row for row in final_rows if is_3d_geometry(row.get("geometry_type", ""))]
     figures = {
         "workflow": fig_dir / "Figure_1_workflow.svg",
         "starts": fig_dir / "Figure_2_start_geometries.svg",
@@ -840,6 +907,9 @@ def write_figures(project: Path, fig_dir: Path, screening_rows: Sequence[Dict[st
         "min_geometries": fig_dir / "Figure_6_min_energy_geometries.svg",
         "min_geometries_3d_svg": fig_dir / "Figure_7_min_energy_geometries_3d.svg",
         "min_geometries_3d_html": fig_dir / "Figure_7_min_energy_geometries_3d.html",
+        "starts_3d": fig_dir / "Figure_8_3d_start_geometries.svg",
+        "final_from_3d_svg": fig_dir / "Figure_9_final_from_3d_starts_3d.svg",
+        "final_from_3d_html": fig_dir / "Figure_9_final_from_3d_starts_3d.html",
     }
     write_workflow_svg(figures["workflow"])
     write_start_geometries_svg(figures["starts"], project)
@@ -849,6 +919,22 @@ def write_figures(project: Path, fig_dir: Path, screening_rows: Sequence[Dict[st
     write_min_energy_geometries_svg(figures["min_geometries"], final_rows, project, limit=10)
     write_min_energy_geometries_3d_svg(figures["min_geometries_3d_svg"], final_rows, project, limit=10)
     write_min_energy_geometries_3d_html(figures["min_geometries_3d_html"], final_rows, project, limit=10)
+    write_3d_start_geometries_svg(figures["starts_3d"], project)
+    write_min_energy_geometries_3d_svg(
+        figures["final_from_3d_svg"],
+        final_3d_rows,
+        project,
+        limit=10,
+        title="Финальные структуры, полученные из 3D/random стартов",
+    )
+    write_min_energy_geometries_3d_html(
+        figures["final_from_3d_html"],
+        final_3d_rows,
+        project,
+        limit=10,
+        title="Финальные B6 структуры из 3D/random стартов",
+        subtitle="Отдельный набор только для расчетов, исходный geometry_type которых относится к 3D/random. Перетащите мышью для вращения; колесо мыши меняет масштаб.",
+    )
     return figures
 
 
@@ -856,6 +942,10 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
     screening_rows = sorted(read_csv(results_csv), key=lambda r: to_float(r.get("total_energy_hartree", "")))
     final_rows = sorted(read_csv(final_csv), key=lambda r: to_float(r.get("total_energy_hartree", "")))
     best_atoms = read_xyz(best_xyz)
+    screening_3d_rows = [row for row in screening_rows if is_3d_geometry(row.get("geometry_type", ""))]
+    final_3d_rows = [row for row in final_rows if is_3d_geometry(row.get("geometry_type", ""))]
+    write_subset_csv(project / "results" / "screening_3d_results.csv", screening_3d_rows)
+    write_subset_csv(project / "results" / "final_from_3d_results.csv", final_3d_rows)
     figures = write_figures(project, fig_dir, screening_rows, final_rows, best_atoms)
 
     screening_done = [r for r in screening_rows if r.get("normal_termination") == "True"]
@@ -1078,6 +1168,17 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
         f"Рисунок 6: `{short_path(str(figures['min_geometries']), project)}` - визуализация 10 финальных оптимизированных геометрий с минимальной энергией.",
         f"Рисунок 7: `{short_path(str(figures['min_geometries_3d_svg']), project)}` - статическая 3D-проекция тех же низкоэнергетических структур; интерактивная версия для вращения мышью сохранена в `{short_path(str(figures['min_geometries_3d_html']), project)}`.",
         "",
+        "### 8.3. Отдельный набор 3D/random структур",
+        f"Для отдельного контроля 3D-ветки расчётной кампании выделены строки, у которых `geometry_type` относится к random/3D/призматическим/октаэдрическим/пирамидальным стартам. В screening таких строк: `{len(screening_3d_rows)}`; в финальном OptFreq-наборе: `{len(final_3d_rows)}`.",
+        "",
+        "Отдельные CSV-файлы для этой части кампании:",
+        "",
+        "- `results/screening_3d_results.csv`: screening-расчёты, начатые из 3D/random геометрий.",
+        "- `results/final_from_3d_results.csv`: финальные OptFreq-расчёты, выбранные из 3D/random стартов.",
+        "",
+        f"Рисунок 8: `{short_path(str(figures['starts_3d']), project)}` - отдельные 3D-стартовые геометрии B₆.",
+        f"Рисунок 9: `{short_path(str(figures['final_from_3d_svg']), project)}` - финальные структуры, которые были получены из 3D/random стартов; интерактивная версия сохранена в `{short_path(str(figures['final_from_3d_html']), project)}`.",
+        "",
         "## 9. Частотный анализ",
         "Структура считалась истинным минимумом только при одновременном выполнении трех условий: `ORCA TERMINATED NORMALLY`, сходимость оптимизации и отсутствие мнимых частот. Если структура имеет хотя бы одну мнимую частоту, она не считается финальным минимумом даже при низкой электронной энергии.",
         "",
@@ -1139,6 +1240,11 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
         f"- `results/figures/Figure_6_min_energy_geometries.svg`: визуализация низкоэнергетических финальных геометрий.",
         f"- `results/figures/Figure_7_min_energy_geometries_3d.svg`: статическая 3D-проекция низкоэнергетических финальных геометрий.",
         f"- `results/figures/Figure_7_min_energy_geometries_3d.html`: интерактивная 3D-визуализация с вращением мышью.",
+        f"- `results/screening_3d_results.csv`: отдельная таблица screening-расчётов из 3D/random стартов.",
+        f"- `results/final_from_3d_results.csv`: отдельная таблица финальных OptFreq-расчётов из 3D/random стартов.",
+        f"- `results/figures/Figure_8_3d_start_geometries.svg`: отдельные 3D-стартовые геометрии.",
+        f"- `results/figures/Figure_9_final_from_3d_starts_3d.svg`: 3D-проекция финальных структур из 3D/random стартов.",
+        f"- `results/figures/Figure_9_final_from_3d_starts_3d.html`: интерактивная версия финальных структур из 3D/random стартов.",
         "",
         "### 13.1. Команды воспроизведения обработки данных",
         "Ниже приведены команды, которые не запускают новые квантово-химические расчёты, а только пересобирают таблицы и отчёт из уже существующих ORCA output-файлов.",
@@ -1188,6 +1294,11 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
                 ["results/figures/Figure_6_min_energy_geometries.svg", "топ финальных оптимизированных геометрий по энергии"],
                 ["results/figures/Figure_7_min_energy_geometries_3d.svg", "статическая 3D-проекция топовых финальных геометрий"],
                 ["results/figures/Figure_7_min_energy_geometries_3d.html", "интерактивная 3D-визуализация топовых финальных геометрий"],
+                ["results/screening_3d_results.csv", "отдельная screening-таблица только для 3D/random стартов"],
+                ["results/final_from_3d_results.csv", "отдельная final-таблица только для кандидатов из 3D/random стартов"],
+                ["results/figures/Figure_8_3d_start_geometries.svg", "отдельные 3D-стартовые геометрии"],
+                ["results/figures/Figure_9_final_from_3d_starts_3d.svg", "статическая 3D-проекция финальных структур из 3D/random стартов"],
+                ["results/figures/Figure_9_final_from_3d_starts_3d.html", "интерактивная 3D-визуализация финальных структур из 3D/random стартов"],
             ],
         ),
         "",
