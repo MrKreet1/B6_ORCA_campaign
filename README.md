@@ -217,6 +217,8 @@ python3 scripts/collect_results.py \
   --csv results/final_results.csv \
   --best-xyz results/best_B6.xyz \
   --report results/B6_final_report.txt
+
+python3 scripts/build_b6_report.py --project-dir .
 ```
 
 Просмотр:
@@ -277,6 +279,7 @@ python3 scripts/collect_results.py --root calculations/stage1 --csv results/resu
 python3 scripts/prepare_final_candidates.py --project-dir . --results-csv results/results.csv --n 10
 bash scripts/run_all.sh calculations/final
 python3 scripts/collect_results.py --root calculations/final --csv results/final_results.csv --best-xyz results/best_B6.xyz --report results/B6_final_report.txt
+python3 scripts/build_b6_report.py --project-dir .
 
 column -s, -t < results/final_results.csv | less -S
 cat results/best_B6.xyz

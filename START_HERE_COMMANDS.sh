@@ -59,4 +59,6 @@ python3 scripts/collect_results.py \
   --best-xyz results/best_B6.xyz \
   --report results/B6_final_report.txt
 
+python3 scripts/build_b6_report.py --project-dir .
+
 column -s, -t < results/final_results.csv | less -S
