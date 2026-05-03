@@ -19,7 +19,7 @@ fi
 python3 scripts/generate_b6_inputs.py \
   --project-dir . \
   --stage-dir calculations/stage1 \
-  --distances "3.5,3.0,2.5,2.2,2.0,1.8,1.6" \
+  --distances "1.5,1.6,1.8,2.0,2.2,2.5,3.0,3.5" \
   --multiplicities "1,3,5" \
   --charge 0 \
   --method R2SCAN-3C \
@@ -36,13 +36,14 @@ bash scripts/rerun_failed.sh calculations/stage1
 python3 scripts/collect_results.py \
   --root calculations/stage1 \
   --csv results/results.csv \
-  --best-xyz results/best_B6.xyz
+  --best-xyz results/best_B6.xyz \
+  --all-energies-csv results/all_energies.csv
 
 python3 scripts/prepare_final_candidates.py \
   --project-dir . \
   --results-csv results/results.csv \
   --final-dir calculations/final \
-  --n 5 \
+  --n 10 \
   --method PBE0 \
   --basis def2-TZVP \
   --extra-keywords "D4 def2/J RIJCOSX TightSCF TightOpt" \
@@ -55,6 +56,7 @@ bash scripts/rerun_failed.sh calculations/final
 python3 scripts/collect_results.py \
   --root calculations/final \
   --csv results/final_results.csv \
-  --best-xyz results/best_B6.xyz
+  --best-xyz results/best_B6.xyz \
+  --report results/B6_final_report.txt
 
 column -s, -t < results/final_results.csv | less -S

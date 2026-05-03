@@ -14,9 +14,10 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import re
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 Atom = Tuple[str, float, float, float]
 
@@ -44,6 +45,44 @@ def read_xyz(path: Path) -> List[Atom]:
     if len(atoms) != n:
         raise ValueError(f"Expected {n} atoms, got {len(atoms)} in {path}")
     return atoms
+
+
+def resolve_existing_path(path_text: str, project: Path) -> Optional[Path]:
+    if not path_text:
+        return None
+
+    raw = Path(path_text)
+    candidates = [raw]
+    if not raw.is_absolute():
+        candidates.append(project / raw)
+
+    marker = project.name
+    parts = raw.parts
+    if marker in parts:
+        idx = parts.index(marker)
+        rel = Path(*parts[idx + 1 :])
+        candidates.append(project / rel)
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return None
+
+
+def distance_fingerprint(atoms: Sequence[Atom]) -> List[float]:
+    distances: List[float] = []
+    for i in range(len(atoms)):
+        _, xi, yi, zi = atoms[i]
+        for j in range(i + 1, len(atoms)):
+            _, xj, yj, zj = atoms[j]
+            distances.append(math.sqrt((xi - xj) ** 2 + (yi - yj) ** 2 + (zi - zj) ** 2))
+    return sorted(distances)
+
+
+def same_geometry(a: Sequence[float], b: Sequence[float], tolerance: float) -> bool:
+    if len(a) != len(b):
+        return False
+    return max(abs(x - y) for x, y in zip(a, b)) <= tolerance
 
 
 def write_xyz(path: Path, atoms: List[Atom], comment: str) -> None:
@@ -115,7 +154,10 @@ def main() -> None:
     p.add_argument("--project-dir", default=".")
     p.add_argument("--results-csv", default="results/results.csv")
     p.add_argument("--final-dir", default="calculations/final")
-    p.add_argument("--n", type=int, default=5, help="Сколько лучших кандидатов взять.")
+    p.add_argument("--n", type=int, default=10, help="Сколько лучших кандидатов взять.")
+    p.add_argument("--best-structures-csv", default="results/best_structures.csv")
+    p.add_argument("--dedupe-tolerance", type=float, default=0.05, help="Порог дедупликации по отсортированным B-B расстояниям, Angstrom.")
+    p.add_argument("--no-dedupe", action="store_true", help="Отключить дедупликацию финальных кандидатов.")
     p.add_argument("--method", default="PBE0")
     p.add_argument("--basis", default="def2-TZVP")
     p.add_argument("--extra-keywords", default="D4 def2/J RIJCOSX TightSCF TightOpt")
@@ -145,9 +187,10 @@ def main() -> None:
             continue
         if not row.get("xyz_file"):
             continue
-        xyz = Path(row["xyz_file"])
-        if not xyz.exists():
+        xyz = resolve_existing_path(row["xyz_file"], project)
+        if xyz is None:
             continue
+        row["_resolved_xyz_file"] = str(xyz)
         if not args.allow_unconverged:
             if not truthy(row.get("normal_termination", "")):
                 continue
@@ -156,14 +199,25 @@ def main() -> None:
         candidates.append(row)
 
     candidates.sort(key=row_energy)
-    selected = candidates[: args.n]
+    selected: List[Tuple[Dict[str, str], List[Atom]]] = []
+    fingerprints: List[List[float]] = []
+    for row in candidates:
+        atoms = read_xyz(Path(row["_resolved_xyz_file"]))
+        fp = distance_fingerprint(atoms)
+        if not args.no_dedupe and any(same_geometry(fp, known, args.dedupe_tolerance) for known in fingerprints):
+            continue
+        selected.append((row, atoms))
+        fingerprints.append(fp)
+        if len(selected) >= args.n:
+            break
+
     if not selected:
         raise RuntimeError("No suitable candidates found. Check results.csv and xyz_file paths.")
 
     manifest: List[str] = []
-    for rank, row in enumerate(selected, start=1):
-        src_xyz = Path(row["xyz_file"])
-        atoms = read_xyz(src_xyz)
+    selected_rows: List[Dict[str, str]] = []
+    for rank, (row, atoms) in enumerate(selected, start=1):
+        src_xyz = Path(row["_resolved_xyz_file"])
         old_name = row.get("calculation_name") or src_xyz.stem
         calc_name = f"FINAL_rank{rank:02d}_{slug(old_name)}_{slug(args.method)}_{slug(args.basis)}_OptFreq"
         calc_dir = final_root / calc_name
@@ -206,9 +260,31 @@ def main() -> None:
         }
         meta_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
         manifest.append(str(inp_path))
+        selected_row = dict(row)
+        selected_row.pop("_resolved_xyz_file", None)
+        selected_row.update(
+            {
+                "rank": str(rank),
+                "final_calculation_name": calc_name,
+                "final_xyz_file": str(xyz_path),
+                "final_input_file": str(inp_path),
+            }
+        )
+        selected_rows.append(selected_row)
         print(f"Prepared rank {rank}: {inp_path}")
 
     (final_root / "final_inputs_manifest.txt").write_text("\n".join(manifest) + "\n", encoding="utf-8")
+    best_structures_csv = Path(args.best_structures_csv)
+    if not best_structures_csv.is_absolute():
+        best_structures_csv = project / best_structures_csv
+    best_structures_csv.parent.mkdir(parents=True, exist_ok=True)
+    base_fields = [field for field in (list(rows[0].keys()) if rows else []) if not field.startswith("_")]
+    fieldnames = ["rank", "final_calculation_name", "final_xyz_file", "final_input_file"] + [f for f in base_fields if f not in {"rank", "final_calculation_name", "final_xyz_file", "final_input_file"}]
+    with best_structures_csv.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(selected_rows)
+    print(f"Wrote selected candidate table: {best_structures_csv}")
     print(f"Prepared {len(selected)} final Opt Freq jobs in {final_root}")
 
 

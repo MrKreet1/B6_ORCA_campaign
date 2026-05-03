@@ -55,6 +55,17 @@ def planar_ring(d: float) -> List[Atom]:
     return atoms_from_coords(coords)
 
 
+def distorted_planar_ring(d: float) -> List[Atom]:
+    coords: List[Coord] = []
+    radial_scale = [1.00, 0.92, 1.08, 0.96, 1.05, 0.90]
+    angle_shift = [0.00, 0.04, -0.03, 0.02, -0.05, 0.03]
+    for i in range(6):
+        a = 2.0 * math.pi * i / 6.0 + angle_shift[i]
+        r = d * radial_scale[i]
+        coords.append((r * math.cos(a), r * math.sin(a), 0.0))
+    return atoms_from_coords(coords)
+
+
 def compact_planar_triangle(d: float) -> List[Atom]:
     # Компактный фрагмент треугольной решётки 3+2+1.
     h = math.sqrt(3.0) * d / 2.0
@@ -87,6 +98,25 @@ def rectangular_planar(d: float) -> List[Atom]:
     return atoms_from_coords(coords)
 
 
+def fused_triangles_planar(d: float) -> List[Atom]:
+    h = math.sqrt(3.0) * d / 2.0
+    coords = [
+        (-d, 0.0, 0.0),
+        (0.0, 0.0, 0.0),
+        (d, 0.0, 0.0),
+        (-0.5 * d, h, 0.0),
+        (0.5 * d, h, 0.0),
+        (0.0, -h, 0.0),
+    ]
+    return atoms_from_coords(coords)
+
+
+def quasi_planar(d: float) -> List[Atom]:
+    atoms = fused_triangles_planar(d)
+    puckers = [-0.08 * d, 0.04 * d, -0.03 * d, 0.10 * d, -0.06 * d, 0.03 * d]
+    return atoms_from_coords([(x, y, z + dz) for (_, x, y, z), dz in zip(atoms, puckers)])
+
+
 def octahedral_3d(d: float) -> List[Atom]:
     # У октаэдра ребро = sqrt(2)*a, значит a = d/sqrt(2).
     a = d / math.sqrt(2.0)
@@ -102,6 +132,16 @@ def trigonal_prism(d: float) -> List[Atom]:
         for i in range(3):
             a = 2.0 * math.pi * i / 3.0 + math.pi / 6.0
             coords.append((r * math.cos(a), r * math.sin(a), z))
+    return atoms_from_coords(coords)
+
+
+def pentagonal_pyramid_3d(d: float) -> List[Atom]:
+    r = d / (2.0 * math.sin(math.pi / 5.0))
+    coords: List[Coord] = []
+    for i in range(5):
+        a = 2.0 * math.pi * i / 5.0
+        coords.append((r * math.cos(a), r * math.sin(a), 0.0))
+    coords.append((0.0, 0.0, d))
     return atoms_from_coords(coords)
 
 
@@ -159,11 +199,15 @@ def all_geometries(d: float, n_random: int, random_seed: int) -> List[Tuple[str,
     geoms: List[Tuple[str, List[Atom]]] = [
         ("linear_chain", linear_chain(d)),
         ("planar_ring", planar_ring(d)),
+        ("distorted_planar_ring", distorted_planar_ring(d)),
         ("compact_planar_triangle", compact_planar_triangle(d)),
         ("rhombic_planar", rhombic_planar(d)),
         ("rectangular_planar", rectangular_planar(d)),
+        ("fused_triangles_planar", fused_triangles_planar(d)),
+        ("quasi_planar", quasi_planar(d)),
         ("octahedral_3d", octahedral_3d(d)),
         ("trigonal_prism", trigonal_prism(d)),
+        ("pentagonal_pyramid_3d", pentagonal_pyramid_3d(d)),
     ]
     for k in range(n_random):
         seed = random_seed + k
@@ -238,7 +282,7 @@ def main() -> None:
     p = argparse.ArgumentParser(description="Generate B6 ORCA input campaign.")
     p.add_argument("--project-dir", default=".", help="Корень проекта. Обычно '.' если вы уже в B6_ORCA_campaign.")
     p.add_argument("--stage-dir", default="calculations/stage1", help="Папка расчётов внутри project-dir.")
-    p.add_argument("--distances", default="3.5,3.0,2.5,2.2,2.0,1.8,1.6")
+    p.add_argument("--distances", default="1.5,1.6,1.8,2.0,2.2,2.5,3.0,3.5")
     p.add_argument("--multiplicities", default="1,3,5")
     p.add_argument("--charge", type=int, default=0)
     p.add_argument("--method", default="R2SCAN-3C")

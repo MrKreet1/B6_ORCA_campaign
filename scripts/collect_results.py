@@ -180,14 +180,168 @@ def parse_last_cartesian_block(text: str) -> Optional[List[Tuple[str, float, flo
 
 
 def write_xyz(path: Path, atoms: List[Tuple[str, float, float, float]], comment: str) -> None:
-    with path.open("w", encoding="utf-8") as f:
-        f.write(f"{len(atoms)}\n")
-        f.write(comment + "\n")
-        for el, x, y, z in atoms:
-            f.write(f"{el:2s} {x:16.8f} {y:16.8f} {z:16.8f}\n")
+    lines = [f"{len(atoms)}", comment]
+    for el, x, y, z in atoms:
+        lines.append(f"{el:2s} {x:16.8f} {y:16.8f} {z:16.8f}")
+    content = "\n".join(lines) + "\n"
+    if path.exists() and path.read_text(encoding="utf-8", errors="replace") == content:
+        return
+    path.write_text(content, encoding="utf-8")
 
 
-def collect(root: Path, output_csv: Path, best_xyz: Path) -> List[Dict[str, object]]:
+def write_rows_csv(path: Path, rows: List[Dict[str, object]], columns: List[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=columns)
+        writer.writeheader()
+        for r in rows:
+            writer.writerow({k: r.get(k, "") for k in columns})
+
+
+def read_csv_rows(path: Path) -> List[Dict[str, str]]:
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8", newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def source_family(geometry_type: object) -> str:
+    text = str(geometry_type).lower()
+    if any(token in text for token in ["random", "3d", "octa", "prism", "pyramid"]):
+        return "3D/random start"
+    if any(token in text for token in ["planar", "ring", "triangle", "rhombic", "rectangular", "quasi"]):
+        return "planar/quasi-planar start"
+    return "other start"
+
+
+def write_final_report(report_path: Path, rows: List[Dict[str, object]], output_csv: Path, best_xyz: Path) -> None:
+    screening_csv = report_path.parent / "results.csv"
+    screening_rows = read_csv_rows(screening_csv)
+    screening_completed = [r for r in screening_rows if r.get("normal_termination") == "True"]
+    screening_converged = [r for r in screening_rows if r.get("optimization_converged") == "True"]
+    completed = [r for r in rows if r.get("normal_termination") == "True"]
+    converged = [r for r in rows if r.get("optimization_converged") == "True"]
+    true_minima = [r for r in rows if r.get("is_true_minimum") == "True"]
+    best = true_minima[0] if true_minima else None
+    final_families: Dict[str, int] = {}
+    for row in rows:
+        family = source_family(row.get("geometry_type", ""))
+        final_families[family] = final_families.get(family, 0) + 1
+
+    top_rows = []
+    for row in rows[:10]:
+        top_rows.append(
+            " | ".join(
+                [
+                    str(row.get("calculation_name", "")),
+                    f"m={row.get('multiplicity', '')}",
+                    f"E={row.get('total_energy_hartree', '')}",
+                    f"dE={row.get('relative_energy_ev', '')} eV",
+                    f"imag={row.get('n_imaginary_frequencies', '')}",
+                    f"true_min={row.get('is_true_minimum', '')}",
+                ]
+            )
+        )
+
+    lines = [
+        "Финальный отчет по расчетному исследованию B6",
+        "",
+        "1. Введение",
+        "Малые кластеры бора чувствительны к стартовой геометрии и спиновому состоянию, поэтому поиск минимума B6 требует многостартового подхода. В расчете проверялись плоские, квазиплоские и 3D-старты, а финальный выбор выполнялся только после частотного анализа.",
+        "",
+        "2. Цель и задачи",
+        "Цель: найти наиболее устойчивую геометрию нейтрального B6 в рамках заданного набора DFT-расчетов. Задачи: сгенерировать старты, провести R2SCAN-3C Opt screening, выбрать низкоэнергетические кандидаты, выполнить PBE0-D4/def2-TZVP Opt Freq и исключить структуры с мнимыми частотами.",
+        "",
+        "3. Методика",
+        "- ПО: ORCA 6.1",
+        "- Заряд: 0",
+        "- Мультиплетности: 1, 3, 5",
+        "- Screening: R2SCAN-3C Opt",
+        "- Финальный уровень: PBE0-D4/def2-TZVP Opt Freq",
+        "- Ресурсы в input-файлах: nprocs 8, maxcore 2500 MB",
+        "- Критерий минимума: normal_termination=True, optimization_converged=True, n_imaginary_frequencies=0",
+        "",
+        "4. Генерация стартовых геометрий",
+        "Генератор покрывает линейные, кольцевые, искаженные кольцевые, компактные плоские, ромбические, прямоугольные, fused-triangle, квазиплоские, октаэдрические, призматические, пирамидальные и random 3D-старты. Основной диапазон расстояний B-B: 1.5, 1.6, 1.8, 2.0, 2.2, 2.5, 3.0, 3.5 Angstrom.",
+        "",
+        "5. Screening R2SCAN-3C Opt",
+        f"- Таблица screening: {screening_csv if screening_rows else 'не найдена рядом с отчетом'}",
+        f"- Строк в screening-таблице: {len(screening_rows)}",
+        f"- Нормально завершено: {len(screening_completed)}",
+        f"- Сошедшаяся оптимизация: {len(screening_converged)}",
+        "Энергии screening извлекались из FINAL SINGLE POINT ENERGY только в реальных ORCA output-файлах.",
+        "",
+        "6. Отбор финальных кандидатов",
+        "Финальные input-файлы готовятся из низкоэнергетических сошедшихся структур. Дедупликация выполняется по отсортированному набору межатомных расстояний B-B с настраиваемым порогом.",
+        "",
+        "7. Финальные PBE0-D4/def2-TZVP Opt Freq расчеты",
+        f"- Таблица final: {output_csv}",
+        f"- Всего финальных output-файлов в таблице: {len(rows)}",
+        f"- ORCA TERMINATED NORMALLY: {len(completed)}",
+        f"- THE OPTIMIZATION HAS CONVERGED: {len(converged)}",
+        f"- Истинных минимумов без мнимых частот: {len(true_minima)}",
+        f"- Источники финальных кандидатов: {', '.join(f'{k}: {v}' for k, v in sorted(final_families.items()))}",
+        "",
+        "8. Частотный анализ",
+        "Структуры с n_imaginary_frequencies > 0 исключаются из финального выбора, даже если их электронная энергия ниже. В текущей финальной таблице критерий истинного минимума берется из колонок has_imaginary_frequencies, n_imaginary_frequencies и is_true_minimum.",
+        "",
+        "9. Энергии финальных кандидатов",
+        "calculation_name | multiplicity | total_energy_hartree | relative_energy_ev | n_imaginary_frequencies | is_true_minimum",
+        *top_rows,
+        "",
+    ]
+
+    if best:
+        lines.extend(
+            [
+                "10. Выбор финального минимума",
+                f"- calculation_name: {best.get('calculation_name', '')}",
+                f"- geometry_type: {best.get('geometry_type', '')}",
+                f"- multiplicity: {best.get('multiplicity', '')}",
+                f"- method/basis: {best.get('method', '')}/{best.get('basis', '')}",
+                f"- total_energy_hartree: {best.get('total_energy_hartree', '')}",
+                f"- relative_energy_ev: {best.get('relative_energy_ev', '')}",
+                f"- lowest_frequency_cm-1: {best.get('lowest_frequency_cm-1', '')}",
+                f"- n_imaginary_frequencies: {best.get('n_imaginary_frequencies', '')}",
+                f"- xyz_file: {best.get('xyz_file', '')}",
+                f"- output_file: {best.get('output_file', '')}",
+                f"- best_B6.xyz: {best_xyz}",
+                "",
+                "Финальная структура выбрана как структура с минимальной полной энергией среди расчетов, которые завершились нормально, имели сошедшуюся оптимизацию и не содержали мнимых частот.",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "Финальная структура не выбрана: среди обработанных расчетов нет истинного минимума по заданным критериям.",
+                "Нужно проверить несошедшиеся расчеты, мнимые частоты и при необходимости перезапустить Opt Freq.",
+            ]
+        )
+
+    lines.extend(
+        [
+            "",
+            "11. Обсуждение плоских и 3D-стартов",
+            "В финальном наборе присутствуют кандидаты, происходящие как из planar/quasi-planar, так и из 3D/random стартов. Если 3D-старты после оптимизации дают ту же низкоэнергетическую область, это поддерживает вывод о необходимости многостартовой проверки, а не выбора одной заранее заданной геометрии.",
+            "",
+            "12. Ограничения работы",
+            "Вывод справедлив для реально выполненного набора стартов, мультиплетностей и уровней теории. Новые старты, более плотная дедупликация, другие функционалы или учет дополнительных поправок могут изменить относительный порядок близких изомеров.",
+            "",
+            "13. Приложения",
+            f"- final_results.csv: {output_csv}",
+            f"- best_B6.xyz: {best_xyz}",
+            f"- results.csv: {screening_csv if screening_rows else 'не найден'}",
+            "",
+            "Все численные энергии, частоты и координаты в этом отчете взяты из ORCA output-файлов и сгенерированных CSV/XYZ файлов. Фиктивные значения не использовались.",
+        ]
+    )
+
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"Wrote final report: {report_path}")
+
+
+def collect(root: Path, output_csv: Path, best_xyz: Path, all_energies_csv: Optional[Path] = None, report_path: Optional[Path] = None) -> List[Dict[str, object]]:
     out_files = sorted(root.rglob("*.out"))
     rows: List[Dict[str, object]] = []
 
@@ -254,12 +408,9 @@ def collect(root: Path, output_csv: Path, best_xyz: Path) -> List[Dict[str, obje
                 rel = (float(r["total_energy_hartree"]) - emin) * HARTREE_TO_EV
                 r["relative_energy_ev"] = f"{rel:.8f}"
 
-    output_csv.parent.mkdir(parents=True, exist_ok=True)
-    with output_csv.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=COLUMNS)
-        writer.writeheader()
-        for r in rows:
-            writer.writerow({k: r.get(k, "") for k in COLUMNS})
+    write_rows_csv(output_csv, rows, COLUMNS)
+    if all_energies_csv is not None:
+        write_rows_csv(all_energies_csv, rows, COLUMNS)
 
     # best_B6.xyz выбирается только среди true minima.
     best_xyz.parent.mkdir(parents=True, exist_ok=True)
@@ -275,6 +426,10 @@ def collect(root: Path, output_csv: Path, best_xyz: Path) -> List[Dict[str, obje
         print("No true minimum found. best_B6.xyz was not created/updated.")
 
     print(f"Wrote CSV: {output_csv}")
+    if all_energies_csv is not None:
+        print(f"Wrote all energies CSV: {all_energies_csv}")
+    if report_path is not None:
+        write_final_report(report_path, rows, output_csv, best_xyz)
     print(f"Parsed output files: {len(out_files)}")
     return rows
 
@@ -284,9 +439,13 @@ def main() -> None:
     p.add_argument("--root", default="calculations", help="Корень для поиска .out файлов.")
     p.add_argument("--csv", default="results/results.csv", help="CSV для записи результатов.")
     p.add_argument("--best-xyz", default="results/best_B6.xyz", help="Файл для лучшей структуры без мнимых частот.")
+    p.add_argument("--all-energies-csv", default="", help="Дополнительная CSV-таблица всех энергий, если нужна.")
+    p.add_argument("--report", default="", help="Итоговый текстовый отчет, если нужен.")
     args = p.parse_args()
 
-    collect(Path(args.root).resolve(), Path(args.csv).resolve(), Path(args.best_xyz).resolve())
+    all_energies_csv = Path(args.all_energies_csv).resolve() if args.all_energies_csv else None
+    report_path = Path(args.report).resolve() if args.report else None
+    collect(Path(args.root).resolve(), Path(args.csv).resolve(), Path(args.best_xyz).resolve(), all_energies_csv, report_path)
 
 
 if __name__ == "__main__":
