@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import csv
 import importlib.util
 import math
+import re
 from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Tuple
 
@@ -88,6 +90,22 @@ def to_float(text: str, default: float = math.inf) -> float:
         return default
 
 
+def truthy(text: object) -> bool:
+    return str(text).strip().lower() == "true"
+
+
+def format_float(value: float, digits: int = 6) -> str:
+    if math.isinf(value) or math.isnan(value):
+        return ""
+    return f"{value:.{digits}f}"
+
+
+def read_text_if_exists(path: Path) -> str:
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
 def markdown_table(rows: Sequence[Dict[str, str]], columns: Sequence[str], project: Path, limit: int | None = None) -> str:
     shown = list(rows if limit is None else rows[:limit])
     out = ["| " + " | ".join(columns) + " |", "| " + " | ".join(["---"] * len(columns)) + " |"]
@@ -104,6 +122,13 @@ def markdown_table(rows: Sequence[Dict[str, str]], columns: Sequence[str], proje
     return "\n".join(out)
 
 
+def simple_markdown_table(headers: Sequence[str], rows: Sequence[Sequence[object]]) -> str:
+    out = ["| " + " | ".join(headers) + " |", "| " + " | ".join(["---"] * len(headers)) + " |"]
+    for row in rows:
+        out.append("| " + " | ".join(str(item) for item in row) + " |")
+    return "\n".join(out)
+
+
 def pair_distances(atoms: Sequence[Atom]) -> List[Tuple[int, int, float]]:
     pairs: List[Tuple[int, int, float]] = []
     for i in range(len(atoms)):
@@ -113,6 +138,16 @@ def pair_distances(atoms: Sequence[Atom]) -> List[Tuple[int, int, float]]:
             d = math.sqrt((xi - xj) ** 2 + (yi - yj) ** 2 + (zi - zj) ** 2)
             pairs.append((i, j, d))
     return pairs
+
+
+def bond_distance_summary(atoms: Sequence[Atom]) -> Tuple[float, float, float, List[Tuple[int, int, float]]]:
+    pairs = sorted(pair_distances(atoms), key=lambda item: item[2])
+    distances = [d for _, _, d in pairs]
+    return min(distances), max(distances), sum(distances) / len(distances), pairs
+
+
+def adjacency_like_bonds(atoms: Sequence[Atom], cutoff: float = 2.05) -> List[Tuple[int, int, float]]:
+    return [(i, j, d) for i, j, d in pair_distances(atoms) if d <= cutoff]
 
 
 def planarity(atoms: Sequence[Atom]) -> Tuple[float, float]:
@@ -149,6 +184,116 @@ def smallest_eigenvector_3x3(matrix: Sequence[Sequence[float]]) -> List[float]:
             v[k][p], v[k][q] = c * vkp - s * vkq, s * vkp + c * vkq
     idx = min(range(3), key=lambda i: a[i][i])
     return [v[0][idx], v[1][idx], v[2][idx]]
+
+
+def parse_frequencies_from_out(path: Path) -> List[float]:
+    text = read_text_if_exists(path)
+    if "VIBRATIONAL FREQUENCIES" not in text:
+        return []
+    start = text.rfind("VIBRATIONAL FREQUENCIES")
+    block = text[start:]
+    stops = [block.find(marker) for marker in ["NORMAL MODES", "IR SPECTRUM", "THERMOCHEMISTRY", "ORCA TERMINATED"] if block.find(marker) > 0]
+    if stops:
+        block = block[: min(stops)]
+    freqs: List[float] = []
+    for line in block.splitlines():
+        match = re.search(r"^\s*\d+\s*:\s*(-?\d+(?:\.\d+)?)\s*cm", line)
+        if match:
+            freqs.append(float(match.group(1)))
+    return freqs
+
+
+def nonzero_frequencies(freqs: Sequence[float], threshold: float = 10.0) -> List[float]:
+    return [freq for freq in freqs if abs(freq) > threshold]
+
+
+def zero_frequency_count(freqs: Sequence[float], threshold: float = 10.0) -> int:
+    return sum(1 for freq in freqs if abs(freq) <= threshold)
+
+
+def group_summary_rows(rows: Sequence[Dict[str, str]], group_key: str) -> List[List[object]]:
+    groups = sorted({row.get(group_key, "") for row in rows}, key=lambda value: str(value))
+    table_rows: List[List[object]] = []
+    for group in groups:
+        subset = [row for row in rows if row.get(group_key, "") == group]
+        with_energy = [row for row in subset if row.get("total_energy_hartree")]
+        best = min(with_energy, key=lambda row: to_float(row.get("total_energy_hartree", "")), default={})
+        table_rows.append(
+            [
+                group,
+                len(subset),
+                sum(1 for row in subset if truthy(row.get("normal_termination", ""))),
+                sum(1 for row in subset if truthy(row.get("optimization_converged", ""))),
+                best.get("total_energy_hartree", ""),
+                best.get("relative_energy_ev", ""),
+                short_name(best.get("calculation_name", ""), 48),
+            ]
+        )
+    return table_rows
+
+
+def final_planarity_rows(final_rows: Sequence[Dict[str, str]]) -> List[List[object]]:
+    rows: List[List[object]] = []
+    for row in final_rows:
+        xyz_path = Path(row.get("xyz_file", ""))
+        if xyz_path.exists():
+            atoms = read_xyz(xyz_path)
+            rms, max_abs = planarity(atoms)
+        else:
+            rms, max_abs = math.nan, math.nan
+        rows.append(
+            [
+                short_name(row.get("calculation_name", ""), 52),
+                row.get("geometry_type", ""),
+                row.get("relative_energy_ev", ""),
+                row.get("lowest_frequency_cm-1", ""),
+                format_float(rms, 5),
+                format_float(max_abs, 5),
+            ]
+        )
+    return rows
+
+
+def final_frequency_rows(final_rows: Sequence[Dict[str, str]]) -> List[List[object]]:
+    rows: List[List[object]] = []
+    for row in final_rows:
+        out_path = Path(row.get("output_file", ""))
+        freqs = parse_frequencies_from_out(out_path)
+        vib = nonzero_frequencies(freqs)
+        rows.append(
+            [
+                short_name(row.get("calculation_name", ""), 52),
+                zero_frequency_count(freqs),
+                len(vib),
+                format_float(min(vib), 2) if vib else "",
+                ", ".join(format_float(freq, 2) for freq in vib[:6]),
+                row.get("n_imaginary_frequencies", ""),
+            ]
+        )
+    return rows
+
+
+def best_coordinate_rows(atoms: Sequence[Atom]) -> List[List[object]]:
+    rows: List[List[object]] = []
+    for idx, (el, x, y, z) in enumerate(atoms, start=1):
+        rows.append([idx, el, f"{x:.8f}", f"{y:.8f}", f"{z:.8f}"])
+    return rows
+
+
+def distance_rows(atoms: Sequence[Atom]) -> List[List[object]]:
+    _, _, _, pairs = bond_distance_summary(atoms)
+    return [[f"B{i + 1}-B{j + 1}", f"{d:.6f}"] for i, j, d in pairs]
+
+
+def source_category(geometry_type: str) -> str:
+    text = geometry_type.lower()
+    if any(token in text for token in ["random", "3d", "octa", "prism", "pyramid"]):
+        return "3D/random"
+    if "quasi" in text:
+        return "quasi-planar"
+    if any(token in text for token in ["planar", "ring", "triangle", "rhombic", "rectangular"]):
+        return "planar"
+    return "other"
 
 
 def load_geometry_module(project: Path):
@@ -336,9 +481,43 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
             rms, _ = planarity(read_xyz(xyz_path))
             if rms <= 0.01:
                 planarized_3d += 1
+    min_dist, max_dist, avg_dist, best_pairs = bond_distance_summary(best_atoms)
+    best_bonds = adjacency_like_bonds(best_atoms)
+    source_counts = Counter(source_category(row.get("geometry_type", "")) for row in final_rows)
+    multiplicity_counts = Counter(row.get("multiplicity", "") for row in screening_rows)
+    distance_values = sorted({row.get("distance", "") for row in screening_rows if row.get("distance", "")}, key=lambda value: to_float(value, 999.0))
+    geometry_values = sorted({row.get("geometry_type", "") for row in screening_rows if row.get("geometry_type", "")})
+    stage1_template = read_text_if_exists(project / "templates" / "stage1_opt_template.inp")
+    final_template = read_text_if_exists(project / "templates" / "final_opt_freq_template.inp")
 
     lines = [
         "# Многостартовый DFT-поиск устойчивой геометрии нейтрального кластера B₆ методом ORCA 6.1",
+        "",
+        "## Аннотация",
+        f"В работе выполнен многостартовый DFT-поиск низкоэнергетической геометрии нейтрального кластера B₆. На первом этапе обработано `{len(screening_rows)}` расчетов R2SCAN-3C Opt, из которых `{len(screening_done)}` завершились нормально и `{len(screening_conv)}` дали сошедшуюся оптимизацию. На втором этапе выполнено `{len(final_rows)}` финальных PBE0-D4/def2-TZVP OptFreq расчетов. Лучшей найденной структурой в рамках данного набора является `{best.get('calculation_name', '')}` с мультиплетностью `{best.get('multiplicity', '')}`, энергией `{best.get('total_energy_hartree', '')}` Hartree и минимальной ненулевой частотой `{best.get('lowest_frequency_cm-1', '')}` cm⁻¹.",
+        "",
+        "Ключевой результат: лучшие кандидаты после финальной оптимизации дают плоскую или практически плоскую структуру. Это согласуется с литературной тенденцией малых борных кластеров к 2D/квазиплоским мотивам, но вывод ограничен использованным набором стартов и выбранным уровнем DFT.",
+        "",
+        "## Краткое содержание результата",
+        "",
+        simple_markdown_table(
+            ["Параметр", "Значение"],
+            [
+                ["Система", "B₆, neutral"],
+                ["Заряд", "0"],
+                ["Проверенные мультиплетности", ", ".join(sorted(multiplicity_counts.keys(), key=lambda x: int(x) if str(x).isdigit() else 99))],
+                ["Screening", "R2SCAN-3C Opt"],
+                ["Финальный уровень", "PBE0-D4/def2-TZVP OptFreq"],
+                ["Screening .out", len(screening_rows)],
+                ["Успешные screening", len(screening_done)],
+                ["Финальные OptFreq .out", len(final_rows)],
+                ["Истинные минимумы без мнимых частот", len(final_true)],
+                ["best_B6.xyz", short_path(str(best_xyz), project)],
+                ["Лучшая энергия, Hartree", best.get("total_energy_hartree", "")],
+                ["Лучшая мультиплетность", best.get("multiplicity", "")],
+                ["Минимальная ненулевая частота, cm⁻¹", best.get("lowest_frequency_cm-1", "")],
+            ],
+        ),
         "",
         "## 1. Введение",
         "Кластеры бора интересны из-за электронодефицитной природы атома B, делокализованного связывания и выраженной структурной конкуренции между плоскими, квазиплоскими и объемными мотивами. Для B₆ это означает, что результат нельзя надежно получить из одной заранее выбранной геометрии: разные стартовые структуры могут сходиться в разные локальные минимумы или, наоборот, показывать, что объемные старты переходят к плоской области поверхности потенциальной энергии.",
@@ -364,6 +543,43 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
         "",
         "Все энергии, частоты и координаты извлекались только из реальных ORCA `.out` файлов и производных CSV/XYZ файлов. Фиктивные или вручную придуманные значения не использовались.",
         "",
+        "### 4.1. Логика расчётного workflow",
+        "Расчётный проект был организован как последовательная кампания, в которой широкий набор стартовых структур сначала быстро оптимизируется на более дешёвом уровне, а затем низкоэнергетические кандидаты уточняются на более дорогом уровне с частотным анализом. Такой подход снижает риск того, что итог будет зависеть от одной произвольно выбранной геометрии.",
+        "",
+        "1. Генерация стартовых XYZ и ORCA `.inp` файлов.",
+        "2. R2SCAN-3C Opt screening для всех стартов, расстояний и мультиплетностей.",
+        "3. Сбор `FINAL SINGLE POINT ENERGY`, признаков нормального завершения и сходимости оптимизации.",
+        "4. Отбор низкоэнергетических кандидатов с геометрической дедупликацией.",
+        "5. Финальный PBE0-D4/def2-TZVP OptFreq.",
+        "6. Частотный анализ и выбор `best_B6.xyz` только среди структур без мнимых частот.",
+        "",
+        "### 4.2. ORCA-настройки screening",
+        "Ключевая строка screening-расчёта:",
+        "",
+        "```orca",
+        "! R2SCAN-3C TightSCF TightOpt Opt",
+        "",
+        "%pal",
+        "  nprocs 8",
+        "end",
+        "",
+        "%maxcore 2500",
+        "```",
+        "",
+        "Дополнительно использовались `MaxIter 500` для SCF и `MaxIter 300` для геометрической оптимизации. Полный шаблон хранится в `templates/stage1_opt_template.inp`.",
+        "",
+        "### 4.3. ORCA-настройки финального этапа",
+        "Ключевая строка финального расчёта:",
+        "",
+        "```orca",
+        "! PBE0 def2-TZVP D4 def2/J RIJCOSX TightSCF TightOpt Opt Freq",
+        "```",
+        "",
+        "На финальном этапе выполнялись одновременно переоптимизация и расчёт частот (`Opt Freq`). Полный шаблон хранится в `templates/final_opt_freq_template.inp`.",
+        "",
+        "### 4.4. Контроль качества парсинга",
+        "Для каждого `.out` файла проверялись строки `ORCA TERMINATED NORMALLY`, `THE OPTIMIZATION HAS CONVERGED`, `FINAL SINGLE POINT ENERGY` и, для финального этапа, блок `VIBRATIONAL FREQUENCIES`. В частотном анализе нулевые трансляционно-вращательные моды не интерпретировались как мнимые вибрационные частоты.",
+        "",
         f"Рисунок 1: `{short_path(str(figures['workflow']), project)}`.",
         "",
         "## 5. Генерация стартовых геометрий B₆",
@@ -371,11 +587,51 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
         "",
         "В расчетной кампании использовались следующие типы стартов: линейная цепочка; плоское кольцо; компактная плоская структура; ромбическая структура; прямоугольная структура; октаэдрическая 3D-структура; тригональная призма; случайные 3D-структуры. Дополнительно генератор поддерживает искаженное плоское кольцо, fused-triangle, квазиплоскую и пирамидальную 3D-структуру для расширенного набора.",
         "",
+        "### 5.1. Набор стартов и их назначение",
+        "",
+        simple_markdown_table(
+            ["Стартовая геометрия", "Тип", "Зачем нужна в кампании"],
+            [
+                ["linear_chain", "1D", "Проверка вытянутого предела и возможной перестройки в компактную форму"],
+                ["planar_ring", "2D", "Кольцевой плоский мотив B₆"],
+                ["distorted_planar_ring", "2D", "Проверка устойчивости кольца к нарушению симметрии"],
+                ["compact_planar_triangle", "2D", "Компактный фрагмент треугольной борной сетки"],
+                ["rhombic_planar", "2D", "Плоский ромбический мотив; важен для сравнения с плоскими минимумами"],
+                ["rectangular_planar", "2D", "Альтернативный плоский мотив с иной топологией B-B контактов"],
+                ["fused_triangles_planar", "2D", "Два соединённых треугольника как компактный борный мотив"],
+                ["quasi_planar", "quasi-2D", "Проверка слабого выхода атомов из плоскости"],
+                ["octahedral_3d", "3D", "Высокосимметричный объёмный конкурент"],
+                ["trigonal_prism", "3D", "Призматический объёмный конкурент"],
+                ["pentagonal_pyramid_3d", "3D", "Пирамидальный объёмный старт"],
+                ["random_3d_seed*", "3D", "Набор случайных, но физически разумных стартов"],
+            ],
+        ),
+        "",
+        f"В уже обработанном screening-наборе представлены `{len(geometry_values)}` типов `geometry_type`: {', '.join(geometry_values)}.",
+        f"Начальные расстояния B-B в обработанном наборе: {', '.join(distance_values)} Å.",
+        "",
         f"Рисунок 2: `{short_path(str(figures['starts']), project)}`.",
         "",
         "## 6. Первичный screening: R2SCAN-3C Opt",
         f"На screening-этапе обработано `{len(screening_rows)}` ORCA output-файлов. Нормально завершились `{len(screening_done)}` расчетов, сходимость оптимизации обнаружена у `{len(screening_conv)}` расчетов. Полные энергии извлекались из строки `FINAL SINGLE POINT ENERGY`; расчеты без нормального завершения или без сходимости не рассматриваются как надежные финальные кандидаты.",
         "",
+        "### 6.1. Screening по мультиплетностям",
+        "Эта таблица показывает, как распределены расчёты по спиновым состояниям. Энергии разных мультиплетностей сравнивались только после успешной оптимизации на одном уровне теории.",
+        "",
+        simple_markdown_table(
+            ["multiplicity", "всего", "normal", "converged", "лучшая E, Hartree", "лучшая ΔE, eV", "лучший расчёт"],
+            group_summary_rows(screening_rows, "multiplicity"),
+        ),
+        "",
+        "### 6.2. Screening по типам стартовых геометрий",
+        "Таблица ниже нужна не для окончательного выбора минимума, а для контроля многостартового покрытия: она показывает, какие типы стартов давали низкоэнергетические структуры после R2SCAN-3C Opt.",
+        "",
+        simple_markdown_table(
+            ["geometry_type", "всего", "normal", "converged", "лучшая E, Hartree", "лучшая ΔE, eV", "лучший расчёт"],
+            group_summary_rows(screening_rows, "geometry_type"),
+        ),
+        "",
+        "### 6.3. Низкоэнергетическая область screening",
         "Таблица 1. Топ-10 screening-результатов; полный набор приведен в `results/results.csv`.",
         "",
         markdown_table(screening_rows, SCREENING_COLUMNS, project, limit=10),
@@ -385,12 +641,29 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
         "## 7. Отбор финальных кандидатов",
         "Финальные кандидаты выбирались из низкоэнергетических расчетов screening-этапа с нормальным завершением и сошедшейся оптимизацией. Для уменьшения дублирования структур используется сравнение отсортированных межатомных расстояний B-B; структуры с близкими distance fingerprints рассматриваются как геометрически повторяющиеся кандидаты. В текущем финальном наборе сохранены 10 OptFreq расчетов.",
         "",
+        "Практически это означает, что финальный этап не является повторением всех 252 screening-расчётов. Его задача - уточнить наиболее перспективную часть поверхности потенциальной энергии и проверить, являются ли структуры настоящими минимумами по частотам.",
+        "",
+        "Распределение источников финальных кандидатов:",
+        "",
+        simple_markdown_table(
+            ["Категория старта", "число финальных расчётов"],
+            sorted(source_counts.items()),
+        ),
+        "",
         "## 8. Финальный расчет: PBE0-D4/def2-TZVP OptFreq",
         f"Финальный этап включал `{len(final_rows)}` расчетов PBE0-D4/def2-TZVP OptFreq. Нормально завершились `{len(final_done)}` расчетов, сходимость оптимизации обнаружена у `{len(final_conv)}` расчетов.",
         "",
         "Таблица 2. Финальные расчеты PBE0-D4/def2-TZVP OptFreq.",
         "",
         markdown_table(final_rows, FINAL_COLUMNS, project, limit=None),
+        "",
+        "### 8.1. Планарность финальных структур",
+        "Для оценки того, перешли ли 3D-старты в плоские или квазиплоские минимумы, для каждого финального XYZ была рассчитана лучшая плоскость по координатам атомов. В таблице приведены RMS-отклонение атомов от этой плоскости и максимальное абсолютное отклонение.",
+        "",
+        simple_markdown_table(
+            ["calculation_name", "source geometry", "ΔE, eV", "lowest ν, cm⁻¹", "RMS plane, Å", "max plane, Å"],
+            final_planarity_rows(final_rows),
+        ),
         "",
         f"Рисунок 5: `{short_path(str(figures['final']), project)}`.",
         "",
@@ -400,6 +673,14 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
         "В ORCA output для финальных расчетов присутствуют шесть нулевых трансляционно-вращательных мод. Они не учитывались как мнимые вибрационные моды и не использовались при выборе `lowest_frequency_cm-1`; в таблицу записана минимальная ненулевая вибрационная частота после отсечения мод с |ν| <= 10 cm⁻¹.",
         "",
         f"В текущей финальной таблице структур с `n_imaginary_frequencies > 0` не найдено; истинных минимумов по указанному критерию: `{len(final_true)}`. Для выбранной структуры `n_imaginary_frequencies = {best.get('n_imaginary_frequencies', '')}`, `lowest_frequency_cm-1 = {best.get('lowest_frequency_cm-1', '')}`.",
+        "",
+        "### 9.1. Подробная сводка по частотам",
+        "Для B₆ всего 18 нормальных мод в декартовом представлении: 6 нулевых/трансляционно-вращательных и 12 ненулевых вибрационных. В таблице приведены первые ненулевые частоты, извлечённые из блоков `VIBRATIONAL FREQUENCIES` финальных ORCA output-файлов.",
+        "",
+        simple_markdown_table(
+            ["calculation_name", "нулевых мод", "ненулевых мод", "min ненулевая, cm⁻¹", "первые ненулевые частоты, cm⁻¹", "n_imag"],
+            final_frequency_rows(final_rows),
+        ),
         "",
         "## 10. Обсуждение результатов",
         f"Самой устойчивой по финальной энергии оказалась структура `{best.get('calculation_name', '')}`. Она получена из старта `{best.get('geometry_type', '')}`, имеет мультиплетность `{best.get('multiplicity', '')}` и полную энергию `{best.get('total_energy_hartree', '')}` Hartree. Ее относительная энергия принята равной `{best.get('relative_energy_ev', '')}` eV.",
@@ -411,6 +692,23 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
         f"Рисунок 4: `{short_path(str(figures['best']), project)}`.",
         "",
         "Полученный результат согласуется с литературной тенденцией малых борных кластеров к плоским или квазиплоским структурам. Важно, что этот вывод сделан после проверки 3D-стартов, а не путем их исключения заранее.",
+        "",
+        "### 10.1. Геометрические характеристики выбранной структуры",
+        f"Для `best_B6.xyz` минимальное межатомное расстояние B-B равно `{min_dist:.6f}` Å, максимальное расстояние среди всех 15 пар атомов равно `{max_dist:.6f}` Å, среднее расстояние по всем парам равно `{avg_dist:.6f}` Å. Если использовать простой геометрический cutoff 2.05 Å для близких B-B контактов, получается `{len(best_bonds)}` коротких контактов.",
+        "",
+        "Координаты выбранной структуры:",
+        "",
+        simple_markdown_table(
+            ["atom", "element", "x, Å", "y, Å", "z, Å"],
+            best_coordinate_rows(best_atoms),
+        ),
+        "",
+        "Все попарные расстояния B-B в выбранной структуре:",
+        "",
+        simple_markdown_table(
+            ["pair", "distance, Å"],
+            distance_rows(best_atoms),
+        ),
         "",
         "## 11. Ограничения расчёта",
         "Следует учитывать, что полученный минимум является лучшим найденным минимумом в рамках использованного набора стартовых структур, мультиплетностей 1, 3 и 5 и выбранного уровня теории PBE0-D4/def2-TZVP. Для более строгого подтверждения глобального минимума можно расширить набор стартовых геометрий, выполнить дополнительную дедупликацию структур, проверить другие функционалы DFT и при необходимости провести более высокоуровневые single-point расчеты.",
@@ -427,6 +725,54 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
         f"- `results/B6_final_report.txt`: текст отчета.",
         f"- `calculations/final/*/*.out`: ORCA output-файлы финальных расчетов.",
         f"- `results/figures/Figure_4_best_B6.svg`: изображение финальной структуры.",
+        "",
+        "### 13.1. Команды воспроизведения обработки данных",
+        "Ниже приведены команды, которые не запускают новые квантово-химические расчёты, а только пересобирают таблицы и отчёт из уже существующих ORCA output-файлов.",
+        "",
+        "```bash",
+        "python3 scripts/collect_results.py \\",
+        "  --root calculations/stage1 \\",
+        "  --csv results/results.csv \\",
+        "  --best-xyz results/best_B6.xyz \\",
+        "  --all-energies-csv results/all_energies.csv",
+        "",
+        "python3 scripts/collect_results.py \\",
+        "  --root calculations/final \\",
+        "  --csv results/final_results.csv \\",
+        "  --best-xyz results/best_B6.xyz",
+        "",
+        "python3 scripts/build_b6_report.py --project-dir .",
+        "```",
+        "",
+        "### 13.2. Шаблоны ORCA input",
+        "Ниже приведены текущие шаблоны input-файлов, которые используются как документированные примеры настроек. Координаты в реальных `.inp` файлах генерируются отдельно для каждой стартовой структуры.",
+        "",
+        "Screening-шаблон:",
+        "",
+        "```orca",
+        stage1_template.strip() if stage1_template else "templates/stage1_opt_template.inp not found",
+        "```",
+        "",
+        "Финальный OptFreq-шаблон:",
+        "",
+        "```orca",
+        final_template.strip() if final_template else "templates/final_opt_freq_template.inp not found",
+        "```",
+        "",
+        "### 13.3. Контрольные файлы",
+        "",
+        simple_markdown_table(
+            ["Файл", "Назначение"],
+            [
+                ["results/results.csv", "screening-таблица R2SCAN-3C Opt"],
+                ["results/all_energies.csv", "дублирующая полная таблица энергий screening"],
+                ["results/final_results.csv", "финальные PBE0-D4/def2-TZVP OptFreq результаты"],
+                ["results/best_B6.xyz", "координаты выбранного минимума"],
+                ["results/B6_final_report.md", "подробный отчёт в Markdown"],
+                ["results/B6_final_report.txt", "текстовая копия отчёта"],
+                ["results/figures/*.svg", "схемы workflow, геометрий и графики энергий"],
+            ],
+        ),
         "",
         "## Литература",
         "[1] J. Burkhardt, Y. Jia, W.-L. Li. Structure Search with the Strategic Escape Algorithm. Journal of Chemical Theory and Computation, 2025, 21, 3765-3773. DOI: https://doi.org/10.1021/acs.jctc.4c01746",
