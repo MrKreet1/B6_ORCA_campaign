@@ -81,6 +81,17 @@
 
 Ключевой результат: 12 ненулевых вибрационных мод, диапазон `233.78–1407.26 cm^-1`, мнимые частоты отсутствуют.
 
+Matplotlib-рисунки:
+
+- [Figure_10_B6_vibrational_frequencies.svg](results/vibrations/B6/matplotlib_plots/Figure_10_B6_vibrational_frequencies.svg)
+- [Figure_11_B6_max_amplitude_by_mode.svg](results/vibrations/B6/matplotlib_plots/Figure_11_B6_max_amplitude_by_mode.svg)
+- [Figure_12_B6_frequency_vs_amplitude.svg](results/vibrations/B6/matplotlib_plots/Figure_12_B6_frequency_vs_amplitude.svg)
+- [Figure_13_B6_atom_participation_heatmap.svg](results/vibrations/B6/matplotlib_plots/Figure_13_B6_atom_participation_heatmap.svg)
+- [Figure_14_B6_dominant_atom_by_mode.svg](results/vibrations/B6/matplotlib_plots/Figure_14_B6_dominant_atom_by_mode.svg)
+- [Figure_15_B6_frequency_distribution.svg](results/vibrations/B6/matplotlib_plots/Figure_15_B6_frequency_distribution.svg)
+- [Figure_16_final_relative_energies_labeled.svg](results/vibrations/B6/matplotlib_plots/Figure_16_final_relative_energies_labeled.svg)
+- [Figure_17_screening_success_rate.svg](results/vibrations/B6/matplotlib_plots/Figure_17_screening_success_rate.svg)
+
 ![B6 vibrational spectrum](results/figures/Figure_10_B6_vibrational_spectrum.svg)
 
 ![B6 normal mode amplitudes](results/figures/Figure_11_B6_normal_mode_amplitudes.svg)

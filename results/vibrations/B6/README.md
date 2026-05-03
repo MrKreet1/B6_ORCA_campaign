@@ -1,5 +1,7 @@
 # B6 vibrational analysis
 
+[← Main project README](../../../README.md)
+
 This folder contains vibrational analysis results for the selected best B6 structure.
 
 ## Selected structure
@@ -30,26 +32,40 @@ Matplotlib plots are stored in a separate folder:
 
 [`matplotlib_plots/`](matplotlib_plots/)
 
-| Plot | Description |
-|---|---|
-| [B6_vibrational_frequencies_bar.png](matplotlib_plots/B6_vibrational_frequencies_bar.png) | Bar plot of all 12 non-zero vibrational frequencies |
-| [B6_vibrational_spectrum_lines.png](matplotlib_plots/B6_vibrational_spectrum_lines.png) | Line-spectrum representation of the same frequencies |
-| [B6_normal_mode_amplitudes_heatmap.png](matplotlib_plots/B6_normal_mode_amplitudes_heatmap.png) | Heatmap of normalized atom displacement amplitudes by mode |
-| [B6_max_amplitude_by_mode.png](matplotlib_plots/B6_max_amplitude_by_mode.png) | Maximum normal-mode amplitude and dominant atom for each mode |
-| [plots_manifest.csv](matplotlib_plots/plots_manifest.csv) | Manifest of generated PNG/SVG plot files |
+| Figure | Plot | Source file | What it shows |
+|---|---|---|---|
+| Figure 10 | [Figure_10_B6_vibrational_frequencies.svg](matplotlib_plots/Figure_10_B6_vibrational_frequencies.svg) | `B6_all_vibrational_frequencies.csv` | Bar chart of all 12 non-zero B6 vibrational frequencies |
+| Figure 11 | [Figure_11_B6_max_amplitude_by_mode.svg](matplotlib_plots/Figure_11_B6_max_amplitude_by_mode.svg) | `B6_mode_summary.csv` | Maximum displacement amplitude by normal mode |
+| Figure 12 | [Figure_12_B6_frequency_vs_amplitude.svg](matplotlib_plots/Figure_12_B6_frequency_vs_amplitude.svg) | `B6_mode_summary.csv` | Frequency versus maximum amplitude scatter plot |
+| Figure 13 | [Figure_13_B6_atom_participation_heatmap.svg](matplotlib_plots/Figure_13_B6_atom_participation_heatmap.svg) | `B6_normal_mode_amplitudes.csv` | Atom participation heatmap by mode |
+| Figure 14 | [Figure_14_B6_dominant_atom_by_mode.svg](matplotlib_plots/Figure_14_B6_dominant_atom_by_mode.svg) | `B6_mode_summary.csv` | Dominant atom index for each mode |
+| Figure 15 | [Figure_15_B6_frequency_distribution.svg](matplotlib_plots/Figure_15_B6_frequency_distribution.svg) | `B6_all_vibrational_frequencies.csv` | Frequency distribution over low/mid/high ranges |
+| Figure 16 | [Figure_16_final_relative_energies_labeled.svg](matplotlib_plots/Figure_16_final_relative_energies_labeled.svg) | `../../final_results.csv` | Final relative energies with multiplicity labels and best_B6 marker |
+| Figure 17 | [Figure_17_screening_success_rate.svg](matplotlib_plots/Figure_17_screening_success_rate.svg) | `../../results.csv` | Screening success/fail summary |
+| Supplement | [B6_vibrational_spectrum_lines.svg](matplotlib_plots/B6_vibrational_spectrum_lines.svg) | `B6_all_vibrational_frequencies.csv` | Line-spectrum representation of the vibrational frequencies |
+| Manifest | [plots_manifest.csv](matplotlib_plots/plots_manifest.csv) | generated | Manifest of generated PNG/SVG plot files |
 
 Preview:
 
-![B6 vibrational frequencies](matplotlib_plots/B6_vibrational_frequencies_bar.png)
+![B6 vibrational frequencies](matplotlib_plots/Figure_10_B6_vibrational_frequencies.png)
 
-![B6 normal-mode amplitudes](matplotlib_plots/B6_normal_mode_amplitudes_heatmap.png)
+![B6 max amplitude by mode](matplotlib_plots/Figure_11_B6_max_amplitude_by_mode.png)
+
+![B6 frequency vs amplitude](matplotlib_plots/Figure_12_B6_frequency_vs_amplitude.png)
+
+![B6 atom participation heatmap](matplotlib_plots/Figure_13_B6_atom_participation_heatmap.png)
+
+![Screening success rate](matplotlib_plots/Figure_17_screening_success_rate.png)
 
 To regenerate these plots:
 
 ```bash
 python3 scripts/plot_b6_vibrations_matplotlib.py \
+  --project-dir . \
   --input-dir results/vibrations/B6 \
-  --output-dir results/vibrations/B6/matplotlib_plots
+  --output-dir results/vibrations/B6/matplotlib_plots \
+  --final-csv results/final_results.csv \
+  --screening-csv results/results.csv
 ```
 
 ## Note

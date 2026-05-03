@@ -291,6 +291,19 @@ end
 | results/vibrations/B6/B6_best.hess | Hessian-файл с вибрационной информацией |
 | results/vibrations/B6/B6_best_optimized.xyz | оптимизированная геометрия выбранного минимума |
 
+Matplotlib-графики вибраций и контрольных метрик сохранены отдельно в `results/vibrations/B6/matplotlib_plots`:
+
+| Рисунок | Файл | Содержание |
+| --- | --- | --- |
+| Figure 10 | results/vibrations/B6/matplotlib_plots/Figure_10_B6_vibrational_frequencies.svg | bar chart всех 12 ненулевых частот B₆ |
+| Figure 11 | results/vibrations/B6/matplotlib_plots/Figure_11_B6_max_amplitude_by_mode.svg | максимальная амплитуда по каждой нормальной моде |
+| Figure 12 | results/vibrations/B6/matplotlib_plots/Figure_12_B6_frequency_vs_amplitude.svg | scatter plot частоты против максимальной амплитуды |
+| Figure 13 | results/vibrations/B6/matplotlib_plots/Figure_13_B6_atom_participation_heatmap.svg | heatmap участия атомов в каждой моде |
+| Figure 14 | results/vibrations/B6/matplotlib_plots/Figure_14_B6_dominant_atom_by_mode.svg | доминирующий атом для каждой моды |
+| Figure 15 | results/vibrations/B6/matplotlib_plots/Figure_15_B6_frequency_distribution.svg | гистограмма распределения частот |
+| Figure 16 | results/vibrations/B6/matplotlib_plots/Figure_16_final_relative_energies_labeled.svg | относительные энергии финальных кандидатов с отметкой best_B6 |
+| Figure 17 | results/vibrations/B6/matplotlib_plots/Figure_17_screening_success_rate.svg | success/fail summary для screening-этапа |
+
 ## 10. Обсуждение результатов
 Самой устойчивой по финальной энергии оказалась структура `FINAL_rank02_B6_random_3d_seed1000_d3.00_q0_m3_R2SCAN-3C_PBE0_def2-TZVP_OptFreq`. Она получена из старта `random_3d_seed1000`, имеет мультиплетность `3` и полную энергию `-148.631808591174` Hartree. Ее относительная энергия принята равной `0.00000000` eV.
 
@@ -470,6 +483,14 @@ B   2.70000000   0.51961524   0.48989795
 | results/vibrations/B6/B6_best.hess | Hessian-файл выбранной структуры |
 | results/figures/Figure_10_B6_vibrational_spectrum.svg | график ненулевых вибрационных частот |
 | results/figures/Figure_11_B6_normal_mode_amplitudes.svg | тепловая карта относительных амплитуд нормальных мод |
+| results/vibrations/B6/matplotlib_plots/Figure_10_B6_vibrational_frequencies.svg | Matplotlib bar chart всех частот |
+| results/vibrations/B6/matplotlib_plots/Figure_11_B6_max_amplitude_by_mode.svg | Matplotlib график max amplitude по модам |
+| results/vibrations/B6/matplotlib_plots/Figure_12_B6_frequency_vs_amplitude.svg | Matplotlib scatter plot frequency vs max amplitude |
+| results/vibrations/B6/matplotlib_plots/Figure_13_B6_atom_participation_heatmap.svg | Matplotlib heatmap участия атомов |
+| results/vibrations/B6/matplotlib_plots/Figure_14_B6_dominant_atom_by_mode.svg | Matplotlib dominant atom per mode |
+| results/vibrations/B6/matplotlib_plots/Figure_15_B6_frequency_distribution.svg | Matplotlib histogram распределения частот |
+| results/vibrations/B6/matplotlib_plots/Figure_16_final_relative_energies_labeled.svg | Matplotlib final relative energies с отметкой best_B6 |
+| results/vibrations/B6/matplotlib_plots/Figure_17_screening_success_rate.svg | Matplotlib screening success/fail |
 
 ## Литература
 [1] J. Burkhardt, Y. Jia, W.-L. Li. Structure Search with the Strategic Escape Algorithm. Journal of Chemical Theory and Computation, 2025, 21, 3765-3773. DOI: https://doi.org/10.1021/acs.jctc.4c01746
