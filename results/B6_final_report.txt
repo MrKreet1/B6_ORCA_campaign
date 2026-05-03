@@ -254,6 +254,43 @@ end
 | rank05_planar_ring_d2.50_q0_m3_R2SCAN-3C | 6 | 12 | 233.06 | 233.06, 319.72, 330.11, 398.45, 516.96, 537.80 | 0 |
 | rank04_random_3d_seed1002_d3.50_q0_m3_R2SCAN-3C | 6 | 12 | 233.66 | 233.66, 319.84, 329.65, 398.47, 517.11, 537.96 | 0 |
 
+### 9.2. Вибрационный анализ выбранной структуры best_B6
+Для выбранной структуры дополнительно вынесен отдельный набор файлов в `results/vibrations/B6`. В нем сохранены исходный ORCA output, Hessian-файл, оптимизированная геометрия, список всех ненулевых частот и таблицы амплитуд нормальных мод. По этим данным найдено `12` ненулевых вибрационных мод; диапазон частот: `233.78`-`1407.26` cm⁻¹; мнимых частот в вынесенной таблице: `0`.
+
+Таблица 3. Ненулевые вибрационные моды выбранного минимума B₆.
+
+| mode | ORCA index | frequency, cm⁻¹ | max amplitude | dominant atom | element |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 6 | 233.780000 | 0.5766411905 | 5 | B |
+| 2 | 7 | 319.760000 | 0.5156551103 | 4 | B |
+| 3 | 8 | 329.760000 | 0.5142726375 | 6 | B |
+| 4 | 9 | 398.760000 | 0.6245402323 | 3 | B |
+| 5 | 10 | 516.970000 | 0.5449552273 | 4 | B |
+| 6 | 11 | 537.830000 | 0.4765877544 | 2 | B |
+| 7 | 12 | 644.880000 | 0.5501178126 | 2 | B |
+| 8 | 13 | 820.850000 | 0.4794459224 | 1 | B |
+| 9 | 14 | 1091.540000 | 0.4734650277 | 3 | B |
+| 10 | 15 | 1104.260000 | 0.4890140864 | 4 | B |
+| 11 | 16 | 1339.440000 | 0.5314949247 | 6 | B |
+| 12 | 17 | 1407.260000 | 0.4822161098 | 1 | B |
+
+Амплитуды нормальных мод являются нормированными компонентами смещений из ORCA. Они показывают относительное участие атомов в каждой моде и не должны интерпретироваться как абсолютные тепловые амплитуды в Å.
+
+Рисунок 10: `results/figures/Figure_10_B6_vibrational_spectrum.svg` - спектр 12 ненулевых вибрационных частот выбранной структуры.
+Рисунок 11: `results/figures/Figure_11_B6_normal_mode_amplitudes.svg` - heatmap относительных амплитуд атомов B1-B6 по нормальным модам.
+
+Файлы вибрационного анализа:
+
+| Файл | Содержание |
+| --- | --- |
+| results/vibrations/B6/B6_all_vibrational_frequencies.csv | 12 ненулевых частот выбранного минимума |
+| results/vibrations/B6/B6_mode_summary.csv | частота, максимальная амплитуда и доминирующий атом для каждой моды |
+| results/vibrations/B6/B6_normal_mode_amplitudes.csv | dx, dy, dz и амплитуда по каждому атому и каждой моде |
+| results/vibrations/B6/B6_vibrational_frequencies_raw.txt | сырой блок VIBRATIONAL FREQUENCIES из ORCA |
+| results/vibrations/B6/B6_best.out | ORCA output выбранной структуры |
+| results/vibrations/B6/B6_best.hess | Hessian-файл с вибрационной информацией |
+| results/vibrations/B6/B6_best_optimized.xyz | оптимизированная геометрия выбранного минимума |
+
 ## 10. Обсуждение результатов
 Самой устойчивой по финальной энергии оказалась структура `FINAL_rank02_B6_random_3d_seed1000_d3.00_q0_m3_R2SCAN-3C_PBE0_def2-TZVP_OptFreq`. Она получена из старта `random_3d_seed1000`, имеет мультиплетность `3` и полную энергию `-148.631808591174` Hartree. Ее относительная энергия принята равной `0.00000000` eV.
 
@@ -322,6 +359,9 @@ end
 - `results/figures/Figure_8_3d_start_geometries.svg`: отдельные 3D-стартовые геометрии.
 - `results/figures/Figure_9_final_from_3d_starts_3d.svg`: 3D-проекция финальных структур из 3D/random стартов.
 - `results/figures/Figure_9_final_from_3d_starts_3d.html`: интерактивная версия финальных структур из 3D/random стартов.
+- `results/vibrations/B6/*`: отдельные таблицы, raw-блок, `.out`, `.hess` и XYZ для вибрационного анализа выбранной структуры.
+- `results/figures/Figure_10_B6_vibrational_spectrum.svg`: спектр ненулевых вибрационных частот.
+- `results/figures/Figure_11_B6_normal_mode_amplitudes.svg`: heatmap амплитуд нормальных мод.
 
 ### 13.1. Команды воспроизведения обработки данных
 Ниже приведены команды, которые не запускают новые квантово-химические расчёты, а только пересобирают таблицы и отчёт из уже существующих ORCA output-файлов.
@@ -421,6 +461,15 @@ B   2.70000000   0.51961524   0.48989795
 | results/figures/Figure_8_3d_start_geometries.svg | отдельные 3D-стартовые геометрии |
 | results/figures/Figure_9_final_from_3d_starts_3d.svg | статическая 3D-проекция финальных структур из 3D/random стартов |
 | results/figures/Figure_9_final_from_3d_starts_3d.html | интерактивная 3D-визуализация финальных структур из 3D/random стартов |
+| results/vibrations/B6/README.md | описание вынесенного вибрационного анализа выбранной структуры |
+| results/vibrations/B6/B6_all_vibrational_frequencies.csv | все 12 ненулевых частот best_B6 |
+| results/vibrations/B6/B6_mode_summary.csv | сводка по нормальным модам и доминирующим атомам |
+| results/vibrations/B6/B6_normal_mode_amplitudes.csv | dx, dy, dz и амплитуды нормальных мод по атомам |
+| results/vibrations/B6/B6_vibrational_frequencies_raw.txt | сырой ORCA-блок VIBRATIONAL FREQUENCIES |
+| results/vibrations/B6/B6_best.out | ORCA output выбранной структуры для вибрационного анализа |
+| results/vibrations/B6/B6_best.hess | Hessian-файл выбранной структуры |
+| results/figures/Figure_10_B6_vibrational_spectrum.svg | график ненулевых вибрационных частот |
+| results/figures/Figure_11_B6_normal_mode_amplitudes.svg | тепловая карта относительных амплитуд нормальных мод |
 
 ## Литература
 [1] J. Burkhardt, Y. Jia, W.-L. Li. Structure Search with the Strategic Escape Algorithm. Journal of Chemical Theory and Computation, 2025, 21, 3765-3773. DOI: https://doi.org/10.1021/acs.jctc.4c01746

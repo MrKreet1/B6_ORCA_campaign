@@ -571,6 +571,155 @@ def write_bar_svg(path: Path, rows: Sequence[Dict[str, str]], title: str, value_
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def write_placeholder_svg(path: Path, title: str, message: str) -> None:
+    path.write_text(
+        "\n".join(
+            [
+                '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="220" viewBox="0 0 900 220">',
+                '<rect width="100%" height="100%" fill="#ffffff"/>',
+                f'<text x="24" y="44" font-family="Arial" font-size="20" font-weight="700" fill="#222">{html(title)}</text>',
+                f'<text x="24" y="86" font-family="Arial" font-size="14" fill="#666">{html(message)}</text>',
+                "</svg>",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def vibration_dir(project: Path) -> Path:
+    return project / "results" / "vibrations" / "B6"
+
+
+def read_vibration_csv(project: Path, filename: str) -> List[Dict[str, str]]:
+    path = vibration_dir(project) / filename
+    if not path.exists():
+        return []
+    return read_csv(path)
+
+
+def vibration_frequency_rows(project: Path) -> List[Dict[str, str]]:
+    return read_vibration_csv(project, "B6_all_vibrational_frequencies.csv")
+
+
+def vibration_mode_summary_rows(project: Path) -> List[Dict[str, str]]:
+    return read_vibration_csv(project, "B6_mode_summary.csv")
+
+
+def vibration_amplitude_rows(project: Path) -> List[Dict[str, str]]:
+    return read_vibration_csv(project, "B6_normal_mode_amplitudes.csv")
+
+
+def vibration_summary_table_rows(mode_rows: Sequence[Dict[str, str]]) -> List[List[object]]:
+    rows: List[List[object]] = []
+    for row in mode_rows:
+        rows.append(
+            [
+                row.get("mode_number", ""),
+                row.get("orca_index", ""),
+                row.get("frequency_cm-1", ""),
+                row.get("max_amplitude", ""),
+                row.get("dominant_atom_index", ""),
+                row.get("dominant_atom_element", ""),
+            ]
+        )
+    return rows
+
+
+def write_vibration_spectrum_svg(path: Path, frequency_rows: Sequence[Dict[str, str]]) -> None:
+    if not frequency_rows:
+        write_placeholder_svg(path, "Вибрационный спектр B6", "Файл B6_all_vibrational_frequencies.csv не найден.")
+        return
+
+    values = [to_float(row.get("frequency_cm-1", ""), math.nan) for row in frequency_rows]
+    values = [value for value in values if not math.isnan(value)]
+    if not values:
+        write_placeholder_svg(path, "Вибрационный спектр B6", "В таблице частот нет численных значений.")
+        return
+
+    width, height = 1120, 390
+    left, right, top, bottom = 70, 30, 54, 72
+    plot_w, plot_h = width - left - right, height - top - bottom
+    fmin, fmax = 0.0, max(values) * 1.06
+    lines = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        '<rect width="100%" height="100%" fill="#ffffff"/>',
+        '<text x="24" y="32" font-family="Arial" font-size="18" font-weight="700" fill="#222">Вибрационные частоты выбранного B6 минимума</text>',
+        f'<line x1="{left}" y1="{top + plot_h}" x2="{left + plot_w}" y2="{top + plot_h}" stroke="#333" stroke-width="1"/>',
+        f'<line x1="{left}" y1="{top}" x2="{left}" y2="{top + plot_h}" stroke="#333" stroke-width="1"/>',
+    ]
+    for tick in range(0, int(fmax) + 1, 200):
+        x = left + (tick - fmin) / (fmax - fmin) * plot_w
+        lines.append(f'<line x1="{x:.2f}" y1="{top + plot_h}" x2="{x:.2f}" y2="{top + plot_h + 6}" stroke="#333" stroke-width="1"/>')
+        lines.append(f'<text x="{x:.2f}" y="{top + plot_h + 24}" text-anchor="middle" font-family="Arial" font-size="12" fill="#333">{tick}</text>')
+        lines.append(f'<line x1="{x:.2f}" y1="{top}" x2="{x:.2f}" y2="{top + plot_h}" stroke="#eceeee" stroke-width="1"/>')
+    lines.append(f'<text x="{left + plot_w / 2}" y="{height - 16}" text-anchor="middle" font-family="Arial" font-size="13" fill="#333">frequency, cm⁻¹</text>')
+
+    step = plot_h / (len(values) + 1)
+    for idx, row in enumerate(frequency_rows, start=1):
+        freq = to_float(row.get("frequency_cm-1", ""), math.nan)
+        if math.isnan(freq):
+            continue
+        y = top + idx * step
+        x = left + (freq - fmin) / (fmax - fmin) * plot_w
+        lines.append(f'<line x1="{x:.2f}" y1="{y - 8:.2f}" x2="{x:.2f}" y2="{y + 8:.2f}" stroke="#4f8a8b" stroke-width="3"/>')
+        lines.append(f'<circle cx="{x:.2f}" cy="{y:.2f}" r="4.5" fill="#4f8a8b" stroke="#1f4142" stroke-width="1"/>')
+        lines.append(f'<text x="{x + 7:.2f}" y="{y + 4:.2f}" font-family="Arial" font-size="11" fill="#222">ν{row.get("mode_number", idx)}={freq:.2f}</text>')
+    lines.append("</svg>")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def write_vibration_amplitude_heatmap_svg(path: Path, amplitude_rows: Sequence[Dict[str, str]]) -> None:
+    if not amplitude_rows:
+        write_placeholder_svg(path, "Амплитуды нормальных мод B6", "Файл B6_normal_mode_amplitudes.csv не найден.")
+        return
+
+    modes = sorted({int(row.get("mode_number", "0")) for row in amplitude_rows if row.get("mode_number", "").isdigit()})
+    atoms = sorted({int(row.get("atom_index", "0")) for row in amplitude_rows if row.get("atom_index", "").isdigit()})
+    amplitudes: Dict[Tuple[int, int], float] = {}
+    frequencies: Dict[int, str] = {}
+    max_amp = 0.0
+    for row in amplitude_rows:
+        if not row.get("mode_number", "").isdigit() or not row.get("atom_index", "").isdigit():
+            continue
+        mode = int(row["mode_number"])
+        atom = int(row["atom_index"])
+        amp = to_float(row.get("amplitude", ""), 0.0)
+        amplitudes[(atom, mode)] = amp
+        frequencies[mode] = row.get("frequency_cm-1", "")
+        max_amp = max(max_amp, amp)
+
+    cell_w, cell_h = 74, 34
+    left, top = 110, 86
+    width = left + cell_w * len(modes) + 40
+    height = top + cell_h * len(atoms) + 72
+    lines = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        '<rect width="100%" height="100%" fill="#ffffff"/>',
+        '<text x="24" y="32" font-family="Arial" font-size="18" font-weight="700" fill="#222">Участие атомов в нормальных модах B6</text>',
+        '<text x="24" y="56" font-family="Arial" font-size="12" fill="#666">Цвет показывает относительную амплитуду смещения атома в моде; значения нормированы на максимум в таблице.</text>',
+    ]
+    for col, mode in enumerate(modes):
+        x = left + col * cell_w + cell_w / 2
+        lines.append(f'<text x="{x:.2f}" y="{top - 34}" text-anchor="middle" font-family="Arial" font-size="11" fill="#222">ν{mode}</text>')
+        lines.append(f'<text x="{x:.2f}" y="{top - 18}" text-anchor="middle" font-family="Arial" font-size="10" fill="#666">{html(frequencies.get(mode, ""))}</text>')
+    for row_idx, atom in enumerate(atoms):
+        y = top + row_idx * cell_h
+        lines.append(f'<text x="{left - 12}" y="{y + cell_h * 0.62:.2f}" text-anchor="end" font-family="Arial" font-size="12" fill="#222">B{atom}</text>')
+        for col, mode in enumerate(modes):
+            x = left + col * cell_w
+            amp = amplitudes.get((atom, mode), 0.0)
+            frac = amp / max_amp if max_amp else 0.0
+            r = int(240 - 176 * frac)
+            g = int(246 - 88 * frac)
+            b = int(246 - 86 * frac)
+            lines.append(f'<rect x="{x:.2f}" y="{y:.2f}" width="{cell_w - 3}" height="{cell_h - 3}" fill="rgb({r},{g},{b})" stroke="#d3dddd" stroke-width="1"/>')
+            lines.append(f'<text x="{x + cell_w / 2:.2f}" y="{y + cell_h * 0.62:.2f}" text-anchor="middle" font-family="Arial" font-size="10" fill="#1f2727">{amp:.2f}</text>')
+    lines.append(f'<text x="{left + cell_w * len(modes) / 2}" y="{height - 18}" text-anchor="middle" font-family="Arial" font-size="12" fill="#333">normal mode number and frequency, cm⁻¹</text>')
+    lines.append("</svg>")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def write_min_energy_geometries_svg(path: Path, final_rows: Sequence[Dict[str, str]], project: Path, limit: int = 10) -> None:
     shown = list(final_rows[:limit])
     cols = 5 if len(shown) > 4 else max(1, len(shown))
@@ -910,6 +1059,8 @@ def write_figures(project: Path, fig_dir: Path, screening_rows: Sequence[Dict[st
         "starts_3d": fig_dir / "Figure_8_3d_start_geometries.svg",
         "final_from_3d_svg": fig_dir / "Figure_9_final_from_3d_starts_3d.svg",
         "final_from_3d_html": fig_dir / "Figure_9_final_from_3d_starts_3d.html",
+        "vibration_spectrum": fig_dir / "Figure_10_B6_vibrational_spectrum.svg",
+        "vibration_heatmap": fig_dir / "Figure_11_B6_normal_mode_amplitudes.svg",
     }
     write_workflow_svg(figures["workflow"])
     write_start_geometries_svg(figures["starts"], project)
@@ -935,6 +1086,8 @@ def write_figures(project: Path, fig_dir: Path, screening_rows: Sequence[Dict[st
         title="Финальные B6 структуры из 3D/random стартов",
         subtitle="Отдельный набор только для расчетов, исходный geometry_type которых относится к 3D/random. Перетащите мышью для вращения; колесо мыши меняет масштаб.",
     )
+    write_vibration_spectrum_svg(figures["vibration_spectrum"], vibration_frequency_rows(project))
+    write_vibration_amplitude_heatmap_svg(figures["vibration_heatmap"], vibration_amplitude_rows(project))
     return figures
 
 
@@ -944,6 +1097,9 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
     best_atoms = read_xyz(best_xyz)
     screening_3d_rows = [row for row in screening_rows if is_3d_geometry(row.get("geometry_type", ""))]
     final_3d_rows = [row for row in final_rows if is_3d_geometry(row.get("geometry_type", ""))]
+    vib_freq_rows = vibration_frequency_rows(project)
+    vib_mode_rows = vibration_mode_summary_rows(project)
+    vib_amp_rows = vibration_amplitude_rows(project)
     write_subset_csv(project / "results" / "screening_3d_results.csv", screening_3d_rows)
     write_subset_csv(project / "results" / "final_from_3d_results.csv", final_3d_rows)
     figures = write_figures(project, fig_dir, screening_rows, final_rows, best_atoms)
@@ -976,6 +1132,11 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
     multiplicity_counts = Counter(row.get("multiplicity", "") for row in screening_rows)
     distance_values = sorted({row.get("distance", "") for row in screening_rows if row.get("distance", "")}, key=lambda value: to_float(value, 999.0))
     geometry_values = sorted({row.get("geometry_type", "") for row in screening_rows if row.get("geometry_type", "")})
+    vib_freq_values = [to_float(row.get("frequency_cm-1", ""), math.nan) for row in vib_freq_rows]
+    vib_freq_values = [value for value in vib_freq_values if not math.isnan(value)]
+    vib_imag_count = sum(1 for row in vib_freq_rows if truthy(row.get("imaginary", "")))
+    vib_min = min(vib_freq_values) if vib_freq_values else math.nan
+    vib_max = max(vib_freq_values) if vib_freq_values else math.nan
     stage1_template = read_text_if_exists(project / "templates" / "stage1_opt_template.inp")
     final_template = read_text_if_exists(project / "templates" / "final_opt_freq_template.inp")
 
@@ -1194,6 +1355,36 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
             final_frequency_rows(final_rows, project),
         ),
         "",
+        "### 9.2. Вибрационный анализ выбранной структуры best_B6",
+        f"Для выбранной структуры дополнительно вынесен отдельный набор файлов в `results/vibrations/B6`. В нем сохранены исходный ORCA output, Hessian-файл, оптимизированная геометрия, список всех ненулевых частот и таблицы амплитуд нормальных мод. По этим данным найдено `{len(vib_freq_rows)}` ненулевых вибрационных мод; диапазон частот: `{format_float(vib_min, 2)}`-`{format_float(vib_max, 2)}` cm⁻¹; мнимых частот в вынесенной таблице: `{vib_imag_count}`.",
+        "",
+        "Таблица 3. Ненулевые вибрационные моды выбранного минимума B₆.",
+        "",
+        simple_markdown_table(
+            ["mode", "ORCA index", "frequency, cm⁻¹", "max amplitude", "dominant atom", "element"],
+            vibration_summary_table_rows(vib_mode_rows),
+        ),
+        "",
+        "Амплитуды нормальных мод являются нормированными компонентами смещений из ORCA. Они показывают относительное участие атомов в каждой моде и не должны интерпретироваться как абсолютные тепловые амплитуды в Å.",
+        "",
+        f"Рисунок 10: `{short_path(str(figures['vibration_spectrum']), project)}` - спектр 12 ненулевых вибрационных частот выбранной структуры.",
+        f"Рисунок 11: `{short_path(str(figures['vibration_heatmap']), project)}` - heatmap относительных амплитуд атомов B1-B6 по нормальным модам.",
+        "",
+        "Файлы вибрационного анализа:",
+        "",
+        simple_markdown_table(
+            ["Файл", "Содержание"],
+            [
+                ["results/vibrations/B6/B6_all_vibrational_frequencies.csv", "12 ненулевых частот выбранного минимума"],
+                ["results/vibrations/B6/B6_mode_summary.csv", "частота, максимальная амплитуда и доминирующий атом для каждой моды"],
+                ["results/vibrations/B6/B6_normal_mode_amplitudes.csv", "dx, dy, dz и амплитуда по каждому атому и каждой моде"],
+                ["results/vibrations/B6/B6_vibrational_frequencies_raw.txt", "сырой блок VIBRATIONAL FREQUENCIES из ORCA"],
+                ["results/vibrations/B6/B6_best.out", "ORCA output выбранной структуры"],
+                ["results/vibrations/B6/B6_best.hess", "Hessian-файл с вибрационной информацией"],
+                ["results/vibrations/B6/B6_best_optimized.xyz", "оптимизированная геометрия выбранного минимума"],
+            ],
+        ),
+        "",
         "## 10. Обсуждение результатов",
         f"Самой устойчивой по финальной энергии оказалась структура `{best.get('calculation_name', '')}`. Она получена из старта `{best.get('geometry_type', '')}`, имеет мультиплетность `{best.get('multiplicity', '')}` и полную энергию `{best.get('total_energy_hartree', '')}` Hartree. Ее относительная энергия принята равной `{best.get('relative_energy_ev', '')}` eV.",
         "",
@@ -1245,6 +1436,9 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
         f"- `results/figures/Figure_8_3d_start_geometries.svg`: отдельные 3D-стартовые геометрии.",
         f"- `results/figures/Figure_9_final_from_3d_starts_3d.svg`: 3D-проекция финальных структур из 3D/random стартов.",
         f"- `results/figures/Figure_9_final_from_3d_starts_3d.html`: интерактивная версия финальных структур из 3D/random стартов.",
+        f"- `results/vibrations/B6/*`: отдельные таблицы, raw-блок, `.out`, `.hess` и XYZ для вибрационного анализа выбранной структуры.",
+        f"- `results/figures/Figure_10_B6_vibrational_spectrum.svg`: спектр ненулевых вибрационных частот.",
+        f"- `results/figures/Figure_11_B6_normal_mode_amplitudes.svg`: heatmap амплитуд нормальных мод.",
         "",
         "### 13.1. Команды воспроизведения обработки данных",
         "Ниже приведены команды, которые не запускают новые квантово-химические расчёты, а только пересобирают таблицы и отчёт из уже существующих ORCA output-файлов.",
@@ -1299,6 +1493,15 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
                 ["results/figures/Figure_8_3d_start_geometries.svg", "отдельные 3D-стартовые геометрии"],
                 ["results/figures/Figure_9_final_from_3d_starts_3d.svg", "статическая 3D-проекция финальных структур из 3D/random стартов"],
                 ["results/figures/Figure_9_final_from_3d_starts_3d.html", "интерактивная 3D-визуализация финальных структур из 3D/random стартов"],
+                ["results/vibrations/B6/README.md", "описание вынесенного вибрационного анализа выбранной структуры"],
+                ["results/vibrations/B6/B6_all_vibrational_frequencies.csv", "все 12 ненулевых частот best_B6"],
+                ["results/vibrations/B6/B6_mode_summary.csv", "сводка по нормальным модам и доминирующим атомам"],
+                ["results/vibrations/B6/B6_normal_mode_amplitudes.csv", "dx, dy, dz и амплитуды нормальных мод по атомам"],
+                ["results/vibrations/B6/B6_vibrational_frequencies_raw.txt", "сырой ORCA-блок VIBRATIONAL FREQUENCIES"],
+                ["results/vibrations/B6/B6_best.out", "ORCA output выбранной структуры для вибрационного анализа"],
+                ["results/vibrations/B6/B6_best.hess", "Hessian-файл выбранной структуры"],
+                ["results/figures/Figure_10_B6_vibrational_spectrum.svg", "график ненулевых вибрационных частот"],
+                ["results/figures/Figure_11_B6_normal_mode_amplitudes.svg", "тепловая карта относительных амплитуд нормальных мод"],
             ],
         ),
         "",

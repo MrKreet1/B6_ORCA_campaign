@@ -66,6 +66,24 @@
 
 ![final structures from 3D starts](results/figures/Figure_9_final_from_3d_starts_3d.svg)
 
+## Вибрационный анализ
+
+Отдельный набор данных по частотам выбранной структуры:
+
+- [Описание вибрационного анализа](results/vibrations/B6/README.md)
+- [Все ненулевые частоты](results/vibrations/B6/B6_all_vibrational_frequencies.csv)
+- [Сводка по нормальным модам](results/vibrations/B6/B6_mode_summary.csv)
+- [Амплитуды нормальных мод](results/vibrations/B6/B6_normal_mode_amplitudes.csv)
+- [Сырой ORCA-блок частот](results/vibrations/B6/B6_vibrational_frequencies_raw.txt)
+- [ORCA output выбранной структуры](results/vibrations/B6/B6_best.out)
+- [Hessian-файл](results/vibrations/B6/B6_best.hess)
+
+Ключевой результат: 12 ненулевых вибрационных мод, диапазон `233.78–1407.26 cm^-1`, мнимые частоты отсутствуют.
+
+![B6 vibrational spectrum](results/figures/Figure_10_B6_vibrational_spectrum.svg)
+
+![B6 normal mode amplitudes](results/figures/Figure_11_B6_normal_mode_amplitudes.svg)
+
 ---
 
 ## Воспроизводимость
