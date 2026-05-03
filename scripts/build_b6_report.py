@@ -83,6 +83,26 @@ def short_path(path_text: str, project: Path) -> str:
     return path_text
 
 
+def resolve_project_path(path_text: str, project: Path) -> Path:
+    raw = Path(path_text)
+    candidates = [raw]
+    if not raw.is_absolute():
+        candidates.insert(0, project / raw)
+
+    marker = project.name
+    parts = raw.parts
+    if marker in parts:
+        idx = parts.index(marker)
+        tail = parts[idx + 1 :]
+        if tail:
+            candidates.append(project / Path(*tail))
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return candidates[0]
+
+
 def to_float(text: str, default: float = math.inf) -> float:
     try:
         return float(text)
@@ -232,10 +252,10 @@ def group_summary_rows(rows: Sequence[Dict[str, str]], group_key: str) -> List[L
     return table_rows
 
 
-def final_planarity_rows(final_rows: Sequence[Dict[str, str]]) -> List[List[object]]:
+def final_planarity_rows(final_rows: Sequence[Dict[str, str]], project: Path) -> List[List[object]]:
     rows: List[List[object]] = []
     for row in final_rows:
-        xyz_path = Path(row.get("xyz_file", ""))
+        xyz_path = resolve_project_path(row.get("xyz_file", ""), project)
         if xyz_path.exists():
             atoms = read_xyz(xyz_path)
             rms, max_abs = planarity(atoms)
@@ -254,10 +274,10 @@ def final_planarity_rows(final_rows: Sequence[Dict[str, str]]) -> List[List[obje
     return rows
 
 
-def final_frequency_rows(final_rows: Sequence[Dict[str, str]]) -> List[List[object]]:
+def final_frequency_rows(final_rows: Sequence[Dict[str, str]], project: Path) -> List[List[object]]:
     rows: List[List[object]] = []
     for row in final_rows:
-        out_path = Path(row.get("output_file", ""))
+        out_path = resolve_project_path(row.get("output_file", ""), project)
         freqs = parse_frequencies_from_out(out_path)
         vib = nonzero_frequencies(freqs)
         rows.append(
@@ -271,6 +291,51 @@ def final_frequency_rows(final_rows: Sequence[Dict[str, str]]) -> List[List[obje
             ]
         )
     return rows
+
+
+def distance_fingerprint(atoms: Sequence[Atom]) -> List[float]:
+    return sorted(d for _, _, d in pair_distances(atoms))
+
+
+def same_distance_fingerprint(a: Sequence[float], b: Sequence[float], tolerance: float) -> bool:
+    return len(a) == len(b) and max((abs(x - y) for x, y in zip(a, b)), default=0.0) <= tolerance
+
+
+def unique_final_geometry_rows(final_rows: Sequence[Dict[str, str]], project: Path, tolerance: float = 0.02, limit: int = 5) -> List[List[object]]:
+    groups: List[Dict[str, object]] = []
+    for row in final_rows:
+        xyz_path = resolve_project_path(row.get("xyz_file", ""), project)
+        if not xyz_path.exists():
+            continue
+        fp = distance_fingerprint(read_xyz(xyz_path))
+        matched = False
+        for group in groups:
+            if same_distance_fingerprint(fp, group["fingerprint"], tolerance):  # type: ignore[arg-type]
+                group["members"].append(row)  # type: ignore[index, union-attr]
+                matched = True
+                break
+        if not matched:
+            groups.append({"fingerprint": fp, "members": [row]})
+
+    table_rows: List[List[object]] = []
+    for idx, group in enumerate(groups[:limit], start=1):
+        members = group["members"]  # type: ignore[assignment]
+        representative = members[0]
+        rel_values = [to_float(row.get("relative_energy_ev", ""), math.nan) for row in members]
+        finite_rel = [value for value in rel_values if not math.isnan(value)]
+        source_types = sorted({row.get("geometry_type", "") for row in members})
+        table_rows.append(
+            [
+                idx,
+                len(members),
+                short_name(representative.get("calculation_name", ""), 52),
+                representative.get("multiplicity", ""),
+                representative.get("relative_energy_ev", ""),
+                format_float(max(finite_rel), 8) if finite_rel else "",
+                ", ".join(source_types),
+            ]
+        )
+    return table_rows
 
 
 def best_coordinate_rows(atoms: Sequence[Atom]) -> List[List[object]]:
@@ -469,6 +534,7 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
     rms_plane, max_plane = planarity(best_atoms)
     close_005 = [r for r in final_rows if to_float(r.get("relative_energy_ev", "999")) <= 0.05]
     close_001 = [r for r in final_rows if to_float(r.get("relative_energy_ev", "999")) <= 0.01]
+    close_0001 = [r for r in final_rows if to_float(r.get("relative_energy_ev", "999")) <= 0.001]
     three_d_final = [
         r
         for r in final_rows
@@ -476,7 +542,7 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
     ]
     planarized_3d = 0
     for row in three_d_final:
-        xyz_path = Path(row.get("xyz_file", ""))
+        xyz_path = resolve_project_path(row.get("xyz_file", ""), project)
         if xyz_path.exists():
             rms, _ = planarity(read_xyz(xyz_path))
             if rms <= 0.01:
@@ -587,6 +653,8 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
         "",
         "В расчетной кампании использовались следующие типы стартов: линейная цепочка; плоское кольцо; компактная плоская структура; ромбическая структура; прямоугольная структура; октаэдрическая 3D-структура; тригональная призма; случайные 3D-структуры. Дополнительно генератор поддерживает искаженное плоское кольцо, fused-triangle, квазиплоскую и пирамидальную 3D-структуру для расширенного набора.",
         "",
+        f"В опубликованной расчетной кампании обработано `{len(screening_rows)}` screening output-файла. Текущая расширенная версия генератора поддерживает набор до `384` screening-расчетов за счет дополнительных геометрий и расстояний; поэтому различие между числом `252` в обработанных результатах и `384` в README относится к разным состояниям расчетной кампании, а не к ошибке в таблицах.",
+        "",
         "### 5.1. Набор стартов и их назначение",
         "",
         simple_markdown_table(
@@ -657,12 +725,20 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
         "",
         markdown_table(final_rows, FINAL_COLUMNS, project, limit=None),
         "",
-        "### 8.1. Планарность финальных структур",
+        "### 8.1. Топ-5 уникальных геометрических групп",
+        "Финальная таблица содержит 10 строк, но строки не обязательно соответствуют 10 независимым минимумам. Для ориентировочной дедупликации ниже финальные XYZ сгруппированы по отсортированным расстояниям B-B с порогом 0.02 Å. Такая таблица помогает отделить физически разные мотивы от повторного попадания в один и тот же минимум.",
+        "",
+        simple_markdown_table(
+            ["group", "строк", "представитель", "m", "min ΔE, eV", "max ΔE, eV", "исходные geometry_type"],
+            unique_final_geometry_rows(final_rows, project, tolerance=0.02, limit=5),
+        ),
+        "",
+        "### 8.2. Планарность финальных структур",
         "Для оценки того, перешли ли 3D-старты в плоские или квазиплоские минимумы, для каждого финального XYZ была рассчитана лучшая плоскость по координатам атомов. В таблице приведены RMS-отклонение атомов от этой плоскости и максимальное абсолютное отклонение.",
         "",
         simple_markdown_table(
             ["calculation_name", "source geometry", "ΔE, eV", "lowest ν, cm⁻¹", "RMS plane, Å", "max plane, Å"],
-            final_planarity_rows(final_rows),
+            final_planarity_rows(final_rows, project),
         ),
         "",
         f"Рисунок 5: `{short_path(str(figures['final']), project)}`.",
@@ -679,13 +755,13 @@ def build_report(project: Path, results_csv: Path, final_csv: Path, best_xyz: Pa
         "",
         simple_markdown_table(
             ["calculation_name", "нулевых мод", "ненулевых мод", "min ненулевая, cm⁻¹", "первые ненулевые частоты, cm⁻¹", "n_imag"],
-            final_frequency_rows(final_rows),
+            final_frequency_rows(final_rows, project),
         ),
         "",
         "## 10. Обсуждение результатов",
         f"Самой устойчивой по финальной энергии оказалась структура `{best.get('calculation_name', '')}`. Она получена из старта `{best.get('geometry_type', '')}`, имеет мультиплетность `{best.get('multiplicity', '')}` и полную энергию `{best.get('total_energy_hartree', '')}` Hartree. Ее относительная энергия принята равной `{best.get('relative_energy_ev', '')}` eV.",
         "",
-        f"Близкие по энергии кандидаты присутствуют: `{len(close_001)}` финальных структур лежат в пределах 0.01 eV, а `{len(close_005)}` структур - в пределах 0.05 eV от минимума. Очень малые различия между несколькими финальными структурами указывают, что разные стартовые геометрии после оптимизации сходятся к одному и тому же или практически идентичному минимуму. Поэтому физически значимым является не различие между этими строками, а устойчивое воспроизведение одной низкоэнергетической плоской структуры из разных стартов.",
+        f"Близкие по энергии кандидаты присутствуют: `{len(close_001)}` финальных структур лежат в пределах 0.01 eV, а `{len(close_005)}` структур - в пределах 0.05 eV от минимума. При этом `{len(close_0001)}` финальных строк отличаются от лучшей структуры менее чем на 0.001 eV, то есть намного меньше практической точности обычного DFT-сравнения изомеров. Несмотря на наличие 10 финальных строк, они, вероятно, представляют несколько очень близких или практически идентичных минимумов. Поэтому физически значимый вывод состоит не в различии между отдельными строками, а в устойчивом воспроизведении одной плоской низкоэнергетической структуры из разных стартовых геометрий.",
         "",
         f"3D-старты были конкурентоспособными как исходные кандидаты: `{len(three_d_final)}` из `{len(final_rows)}` финальных расчетов происходят из 3D/random стартов. При этом анализ планарности оптимизированных финальных XYZ показывает, что `{planarized_3d}` из них имеют RMS-отклонение от лучшей плоскости не больше 0.01 Å. Для выбранного `best_B6.xyz` RMS-отклонение от плоскости равно `{rms_plane:.4f}` Å, максимальное отклонение `{max_plane:.4f}` Å. Поэтому итоговая структура является плоской или практически плоской, несмотря на то что лучший старт был random 3D.",
         "",

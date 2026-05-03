@@ -211,6 +211,47 @@ def read_csv_rows(path: Path) -> List[Dict[str, str]]:
         return list(csv.DictReader(f))
 
 
+def portable_path(path_value: object, project_dir: Path) -> str:
+    """Return a repository-relative POSIX path when possible."""
+    if not path_value:
+        return ""
+    raw = Path(str(path_value))
+    try:
+        resolved = raw.resolve() if raw.is_absolute() else (project_dir / raw).resolve()
+        return resolved.relative_to(project_dir).as_posix()
+    except Exception:
+        pass
+
+    marker = project_dir.name
+    parts = raw.parts
+    if marker in parts:
+        idx = parts.index(marker)
+        tail = parts[idx + 1 :]
+        if tail:
+            return Path(*tail).as_posix()
+    return str(path_value).replace("\\", "/")
+
+
+def resolve_project_path(path_text: str, project_dir: Path) -> Path:
+    raw = Path(path_text)
+    candidates = [raw]
+    if not raw.is_absolute():
+        candidates.insert(0, project_dir / raw)
+
+    marker = project_dir.name
+    parts = raw.parts
+    if marker in parts:
+        idx = parts.index(marker)
+        tail = parts[idx + 1 :]
+        if tail:
+            candidates.append(project_dir / Path(*tail))
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return candidates[0]
+
+
 def source_family(geometry_type: object) -> str:
     text = str(geometry_type).lower()
     if any(token in text for token in ["random", "3d", "octa", "prism", "pyramid"]):
@@ -347,7 +388,15 @@ def write_final_report(report_path: Path, rows: List[Dict[str, object]], output_
     print(f"Wrote final report: {report_path}")
 
 
-def collect(root: Path, output_csv: Path, best_xyz: Path, all_energies_csv: Optional[Path] = None, report_path: Optional[Path] = None) -> List[Dict[str, object]]:
+def collect(
+    root: Path,
+    output_csv: Path,
+    best_xyz: Path,
+    all_energies_csv: Optional[Path] = None,
+    report_path: Optional[Path] = None,
+    project_dir: Optional[Path] = None,
+) -> List[Dict[str, object]]:
+    project_dir = (project_dir or Path.cwd()).resolve()
     out_files = sorted(root.rglob("*.out"))
     rows: List[Dict[str, object]] = []
 
@@ -368,9 +417,9 @@ def collect(root: Path, output_csv: Path, best_xyz: Path, all_energies_csv: Opti
         atoms = parse_last_cartesian_block(text)
         if atoms:
             write_xyz(opt_xyz_path, atoms, f"Optimized geometry from {out_path.name}")
-            xyz_file = str(opt_xyz_path)
+            xyz_file = portable_path(opt_xyz_path, project_dir)
         else:
-            xyz_file = str(meta.get("xyz_file") or "")
+            xyz_file = portable_path(meta.get("xyz_file") or "", project_dir)
 
         # true minimum требует наличия частотного расчёта. Для stage1 Opt без частот это False.
         has_freq = bool(freqs)
@@ -393,7 +442,7 @@ def collect(root: Path, output_csv: Path, best_xyz: Path, all_energies_csv: Opti
             "lowest_frequency_cm-1": lowest_freq,
             "is_true_minimum": str(is_true_min),
             "xyz_file": xyz_file,
-            "output_file": str(out_path),
+            "output_file": portable_path(out_path, project_dir),
         }
         rows.append(row)
 
@@ -422,7 +471,7 @@ def collect(root: Path, output_csv: Path, best_xyz: Path, all_energies_csv: Opti
     best_xyz.parent.mkdir(parents=True, exist_ok=True)
     true_minima = [r for r in rows if r.get("is_true_minimum") == "True" and str(r.get("xyz_file", "")).strip()]
     if true_minima:
-        src = Path(str(true_minima[0]["xyz_file"]))
+        src = resolve_project_path(str(true_minima[0]["xyz_file"]), project_dir)
         if src.exists():
             shutil.copyfile(src, best_xyz)
             print(f"Best true minimum saved to: {best_xyz}")
@@ -447,11 +496,35 @@ def main() -> None:
     p.add_argument("--best-xyz", default="results/best_B6.xyz", help="Файл для лучшей структуры без мнимых частот.")
     p.add_argument("--all-energies-csv", default="", help="Дополнительная CSV-таблица всех энергий, если нужна.")
     p.add_argument("--report", default="", help="Итоговый текстовый отчет, если нужен.")
+    p.add_argument("--project-dir", default=".", help="Корень проекта для записи переносимых относительных путей в CSV.")
     args = p.parse_args()
 
-    all_energies_csv = Path(args.all_energies_csv).resolve() if args.all_energies_csv else None
-    report_path = Path(args.report).resolve() if args.report else None
-    collect(Path(args.root).resolve(), Path(args.csv).resolve(), Path(args.best_xyz).resolve(), all_energies_csv, report_path)
+    project_dir = Path(args.project_dir).resolve()
+
+    root = Path(args.root)
+    if not root.is_absolute():
+        root = project_dir / root
+    output_csv = Path(args.csv)
+    if not output_csv.is_absolute():
+        output_csv = project_dir / output_csv
+    best_xyz = Path(args.best_xyz)
+    if not best_xyz.is_absolute():
+        best_xyz = project_dir / best_xyz
+    all_energies_csv = Path(args.all_energies_csv) if args.all_energies_csv else None
+    if all_energies_csv is not None and not all_energies_csv.is_absolute():
+        all_energies_csv = project_dir / all_energies_csv
+    report_path = Path(args.report) if args.report else None
+    if report_path is not None and not report_path.is_absolute():
+        report_path = project_dir / report_path
+
+    collect(
+        root.resolve(),
+        output_csv.resolve(),
+        best_xyz.resolve(),
+        all_energies_csv.resolve() if all_energies_csv is not None else None,
+        report_path.resolve() if report_path is not None else None,
+        project_dir,
+    )
 
 
 if __name__ == "__main__":
