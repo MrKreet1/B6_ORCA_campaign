@@ -24,6 +24,34 @@ This folder contains vibrational analysis results for the selected best B6 struc
 | B6_best.hess | ORCA Hessian file containing vibrational information |
 | B6_best_optimized.xyz | Optimized geometry of the selected B6 structure |
 
+## Matplotlib plots
+
+Matplotlib plots are stored in a separate folder:
+
+[`matplotlib_plots/`](matplotlib_plots/)
+
+| Plot | Description |
+|---|---|
+| [B6_vibrational_frequencies_bar.png](matplotlib_plots/B6_vibrational_frequencies_bar.png) | Bar plot of all 12 non-zero vibrational frequencies |
+| [B6_vibrational_spectrum_lines.png](matplotlib_plots/B6_vibrational_spectrum_lines.png) | Line-spectrum representation of the same frequencies |
+| [B6_normal_mode_amplitudes_heatmap.png](matplotlib_plots/B6_normal_mode_amplitudes_heatmap.png) | Heatmap of normalized atom displacement amplitudes by mode |
+| [B6_max_amplitude_by_mode.png](matplotlib_plots/B6_max_amplitude_by_mode.png) | Maximum normal-mode amplitude and dominant atom for each mode |
+| [plots_manifest.csv](matplotlib_plots/plots_manifest.csv) | Manifest of generated PNG/SVG plot files |
+
+Preview:
+
+![B6 vibrational frequencies](matplotlib_plots/B6_vibrational_frequencies_bar.png)
+
+![B6 normal-mode amplitudes](matplotlib_plots/B6_normal_mode_amplitudes_heatmap.png)
+
+To regenerate these plots:
+
+```bash
+python3 scripts/plot_b6_vibrations_matplotlib.py \
+  --input-dir results/vibrations/B6 \
+  --output-dir results/vibrations/B6/matplotlib_plots
+```
+
 ## Note
 
 The displacement amplitudes are normalized normal-mode components from ORCA.

@@ -77,6 +77,7 @@
 - [Сырой ORCA-блок частот](results/vibrations/B6/B6_vibrational_frequencies_raw.txt)
 - [ORCA output выбранной структуры](results/vibrations/B6/B6_best.out)
 - [Hessian-файл](results/vibrations/B6/B6_best.hess)
+- [Matplotlib-графики вибраций](results/vibrations/B6/matplotlib_plots/)
 
 Ключевой результат: 12 ненулевых вибрационных мод, диапазон `233.78–1407.26 cm^-1`, мнимые частоты отсутствуют.
 
