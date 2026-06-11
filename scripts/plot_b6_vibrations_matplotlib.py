@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
@@ -54,6 +55,16 @@ FIGURE_ORDER = [
         "Figure_17_screening_success_rate",
         "Figure 17. Screening Success Rate",
         "Successful versus failed/not-normal R2SCAN-3C screening calculations.",
+    ),
+    (
+        "Figure_18_B6_vibrational_spectrogram",
+        "Figure 18. B6 Vibrational Spectrogram",
+        "Gaussian-broadened 2D frequency spectrogram built from the 12 non-zero B6 normal-mode frequencies.",
+    ),
+    (
+        "Figure_19_B6_broadened_vibrational_spectrum",
+        "Figure 19. B6 Broadened Vibrational Spectrum",
+        "Summed Gaussian-broadened spectrum of the 12 B6 normal-mode frequencies.",
     ),
     (
         "B6_vibrational_spectrum_lines",
@@ -134,6 +145,81 @@ def plot_spectrum_lines(freq_rows: Sequence[Dict[str, str]], output_dir: Path) -
     ax.set_axisbelow(True)
 
     return save_figure(fig, output_dir, "B6_vibrational_spectrum_lines")
+
+
+def frequency_grid(freqs: Sequence[float], points: int = 900) -> List[float]:
+    upper = max(freqs) * 1.08
+    step = upper / (points - 1)
+    return [index * step for index in range(points)]
+
+
+def gaussian_profile(grid: Sequence[float], center: float, sigma_cm: float) -> List[float]:
+    return [math.exp(-0.5 * ((freq - center) / sigma_cm) ** 2) for freq in grid]
+
+
+def plot_vibrational_spectrogram(
+    freq_rows: Sequence[Dict[str, str]], output_dir: Path, sigma_cm: float = 22.0
+) -> List[Path]:
+    modes = [int(row["mode_number"]) for row in freq_rows]
+    freqs = [to_float(row["frequency_cm-1"]) for row in freq_rows]
+    grid = frequency_grid(freqs)
+    matrix = [gaussian_profile(grid, freq, sigma_cm) for freq in freqs]
+
+    fig, ax = plt.subplots(figsize=(11.0, 5.7))
+    image = ax.imshow(
+        matrix,
+        aspect="auto",
+        cmap="magma",
+        origin="lower",
+        extent=[grid[0], grid[-1], min(modes) - 0.5, max(modes) + 0.5],
+        vmin=0.0,
+        vmax=1.0,
+    )
+    ax.scatter(freqs, modes, s=28, color="#f5f7f7", edgecolor="#1f2727", linewidth=0.45, zorder=3)
+    ax.set_title(f"B6 vibrational spectrogram, Gaussian broadening = {sigma_cm:.0f} cm$^{{-1}}$")
+    ax.set_xlabel("Frequency, cm$^{-1}$")
+    ax.set_ylabel("Normal mode number")
+    ax.set_yticks(modes)
+    ax.set_xlim(0, grid[-1])
+
+    for mode, freq in zip(modes, freqs):
+        ax.text(freq + max(freqs) * 0.012, mode, f"{freq:.0f}", va="center", ha="left", fontsize=7.5, color="#ffffff")
+
+    cbar = fig.colorbar(image, ax=ax, fraction=0.035, pad=0.025)
+    cbar.set_label("Relative intensity")
+
+    return save_figure(fig, output_dir, "Figure_18_B6_vibrational_spectrogram")
+
+
+def plot_broadened_vibrational_spectrum(
+    freq_rows: Sequence[Dict[str, str]], output_dir: Path, sigma_cm: float = 22.0
+) -> List[Path]:
+    freqs = [to_float(row["frequency_cm-1"]) for row in freq_rows]
+    modes = [int(row["mode_number"]) for row in freq_rows]
+    grid = frequency_grid(freqs)
+    total = [0.0 for _ in grid]
+    for freq in freqs:
+        profile = gaussian_profile(grid, freq, sigma_cm)
+        total = [current + value for current, value in zip(total, profile)]
+    scale = max(total) or 1.0
+    total = [value / scale for value in total]
+
+    fig, ax = plt.subplots(figsize=(10.5, 4.5))
+    ax.fill_between(grid, total, color="#f2b84b", alpha=0.34)
+    ax.plot(grid, total, color="#7a3d23", linewidth=2.0)
+    for mode, freq in zip(modes, freqs):
+        ax.axvline(freq, color="#4f8a8b", linewidth=0.8, alpha=0.55)
+        ax.text(freq, 1.03, str(mode), ha="center", va="bottom", fontsize=7.5, rotation=90)
+
+    ax.set_title(f"B6 Gaussian-broadened vibrational spectrum, sigma = {sigma_cm:.0f} cm$^{{-1}}$")
+    ax.set_xlabel("Frequency, cm$^{-1}$")
+    ax.set_ylabel("Normalized intensity")
+    ax.set_xlim(0, grid[-1])
+    ax.set_ylim(0, 1.13)
+    ax.grid(color="#d9dddd", linewidth=0.8)
+    ax.set_axisbelow(True)
+
+    return save_figure(fig, output_dir, "Figure_19_B6_broadened_vibrational_spectrum")
 
 
 def amplitude_matrix(amplitude_rows: Sequence[Dict[str, str]]) -> Tuple[List[int], List[int], List[List[float]]]:
@@ -498,7 +584,8 @@ def write_gallery_markdown_page(output_dir: Path) -> Path:
             "  --input-dir results/vibrations/B6 \\",
             "  --output-dir results/vibrations/B6/matplotlib_plots \\",
             "  --final-csv results/final_results.csv \\",
-            "  --screening-csv results/results.csv",
+            "  --screening-csv results/results.csv \\",
+            "  --spectrogram-sigma 22.0",
             "```",
             "",
         ]
@@ -514,6 +601,7 @@ def main() -> None:
     parser.add_argument("--output-dir", default="results/vibrations/B6/matplotlib_plots")
     parser.add_argument("--final-csv", default="results/final_results.csv")
     parser.add_argument("--screening-csv", default="results/results.csv")
+    parser.add_argument("--spectrogram-sigma", type=float, default=22.0, help="Gaussian broadening sigma in cm^-1.")
     args = parser.parse_args()
 
     project_dir = Path(args.project_dir).resolve()
@@ -553,6 +641,10 @@ def main() -> None:
         manifest_items.append((path, "Figure 16. Final relative energies with best_B6 marker and multiplicity labels."))
     for path in plot_screening_success_rate(screening_rows, output_dir):
         manifest_items.append((path, "Figure 17. Screening success/fail summary."))
+    for path in plot_vibrational_spectrogram(freq_rows, output_dir, sigma_cm=args.spectrogram_sigma):
+        manifest_items.append((path, "Figure 18. Gaussian-broadened 2D spectrogram of B6 vibrational frequencies."))
+    for path in plot_broadened_vibrational_spectrum(freq_rows, output_dir, sigma_cm=args.spectrogram_sigma):
+        manifest_items.append((path, "Figure 19. Summed Gaussian-broadened B6 vibrational spectrum."))
 
     # Extra line-spectrum view kept as a supplementary Matplotlib plot.
     for path in plot_spectrum_lines(freq_rows, output_dir):

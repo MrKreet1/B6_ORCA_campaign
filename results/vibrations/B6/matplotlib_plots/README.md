@@ -68,6 +68,22 @@ Successful versus failed/not-normal R2SCAN-3C screening calculations.
 
 ![Figure 17. Screening Success Rate](Figure_17_screening_success_rate.svg)
 
+## Figure 18. B6 Vibrational Spectrogram
+
+Gaussian-broadened 2D frequency spectrogram built from the 12 non-zero B6 normal-mode frequencies.
+
+[SVG](Figure_18_B6_vibrational_spectrogram.svg) | [PNG](Figure_18_B6_vibrational_spectrogram.png)
+
+![Figure 18. B6 Vibrational Spectrogram](Figure_18_B6_vibrational_spectrogram.svg)
+
+## Figure 19. B6 Broadened Vibrational Spectrum
+
+Summed Gaussian-broadened spectrum of the 12 B6 normal-mode frequencies.
+
+[SVG](Figure_19_B6_broadened_vibrational_spectrum.svg) | [PNG](Figure_19_B6_broadened_vibrational_spectrum.png)
+
+![Figure 19. B6 Broadened Vibrational Spectrum](Figure_19_B6_broadened_vibrational_spectrum.svg)
+
 ## Supplement. Frequency Line Spectrum
 
 Line-spectrum representation of the same non-zero vibrational frequencies.
@@ -86,5 +102,6 @@ python3 scripts/plot_b6_vibrations_matplotlib.py \
   --input-dir results/vibrations/B6 \
   --output-dir results/vibrations/B6/matplotlib_plots \
   --final-csv results/final_results.csv \
-  --screening-csv results/results.csv
+  --screening-csv results/results.csv \
+  --spectrogram-sigma 22.0
 ```

@@ -50,6 +50,8 @@ HTML version:
 | Figure 15 | [Figure_15_B6_frequency_distribution.svg](matplotlib_plots/Figure_15_B6_frequency_distribution.svg) | `B6_all_vibrational_frequencies.csv` | Frequency distribution over low/mid/high ranges |
 | Figure 16 | [Figure_16_final_relative_energies_labeled.svg](matplotlib_plots/Figure_16_final_relative_energies_labeled.svg) | `../../final_results.csv` | Final relative energies with multiplicity labels and best_B6 marker |
 | Figure 17 | [Figure_17_screening_success_rate.svg](matplotlib_plots/Figure_17_screening_success_rate.svg) | `../../results.csv` | Screening success/fail summary |
+| Figure 18 | [Figure_18_B6_vibrational_spectrogram.svg](matplotlib_plots/Figure_18_B6_vibrational_spectrogram.svg) | `B6_all_vibrational_frequencies.csv` | Gaussian-broadened 2D spectrogram of B6 vibrational frequencies |
+| Figure 19 | [Figure_19_B6_broadened_vibrational_spectrum.svg](matplotlib_plots/Figure_19_B6_broadened_vibrational_spectrum.svg) | `B6_all_vibrational_frequencies.csv` | Summed Gaussian-broadened B6 vibrational spectrum |
 | Supplement | [B6_vibrational_spectrum_lines.svg](matplotlib_plots/B6_vibrational_spectrum_lines.svg) | `B6_all_vibrational_frequencies.csv` | Line-spectrum representation of the vibrational frequencies |
 | Manifest | [plots_manifest.csv](matplotlib_plots/plots_manifest.csv) | generated | Manifest of generated PNG/SVG plot files |
 
@@ -65,6 +67,10 @@ Preview:
 
 ![Screening success rate](matplotlib_plots/Figure_17_screening_success_rate.png)
 
+![B6 vibrational spectrogram](matplotlib_plots/Figure_18_B6_vibrational_spectrogram.png)
+
+![B6 broadened vibrational spectrum](matplotlib_plots/Figure_19_B6_broadened_vibrational_spectrum.png)
+
 To regenerate these plots:
 
 ```bash
@@ -73,7 +79,8 @@ python3 scripts/plot_b6_vibrations_matplotlib.py \
   --input-dir results/vibrations/B6 \
   --output-dir results/vibrations/B6/matplotlib_plots \
   --final-csv results/final_results.csv \
-  --screening-csv results/results.csv
+  --screening-csv results/results.csv \
+  --spectrogram-sigma 22.0
 ```
 
 ## Note

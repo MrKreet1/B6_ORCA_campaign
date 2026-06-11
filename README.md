@@ -93,10 +93,14 @@ Matplotlib-рисунки:
 - [Figure_15_B6_frequency_distribution.svg](results/vibrations/B6/matplotlib_plots/Figure_15_B6_frequency_distribution.svg)
 - [Figure_16_final_relative_energies_labeled.svg](results/vibrations/B6/matplotlib_plots/Figure_16_final_relative_energies_labeled.svg)
 - [Figure_17_screening_success_rate.svg](results/vibrations/B6/matplotlib_plots/Figure_17_screening_success_rate.svg)
+- [Figure_18_B6_vibrational_spectrogram.svg](results/vibrations/B6/matplotlib_plots/Figure_18_B6_vibrational_spectrogram.svg)
+- [Figure_19_B6_broadened_vibrational_spectrum.svg](results/vibrations/B6/matplotlib_plots/Figure_19_B6_broadened_vibrational_spectrum.svg)
 
 ![B6 vibrational spectrum](results/figures/Figure_10_B6_vibrational_spectrum.svg)
 
 ![B6 normal mode amplitudes](results/figures/Figure_11_B6_normal_mode_amplitudes.svg)
+
+![B6 vibrational spectrogram](results/vibrations/B6/matplotlib_plots/Figure_18_B6_vibrational_spectrogram.svg)
 
 ---
 
