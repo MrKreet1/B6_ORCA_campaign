@@ -22,8 +22,12 @@
 
 - [Итоговый отчёт Markdown](results/B6_final_report.md)
 - [Итоговый отчёт TXT](results/B6_final_report.txt)
+- [Итоговый отчёт v2 Markdown](results/B6_final_report_v2.md)
+- [Итоговый отчёт v2 TXT](results/B6_final_report_v2.txt)
 - [Screening-таблица](results/results.csv)
 - [Финальная таблица](results/final_results.csv)
+- [Уникальные минимумы screening](results/screening_unique_minima.csv)
+- [Mulliken/Loewdin population для best_B6](results/best_B6_population.csv)
 - [Все энергии](results/all_energies.csv)
 - [Лучшая структура best_B6.xyz](results/best_B6.xyz)
 - [Рисунки отчёта](results/figures/)
@@ -34,8 +38,13 @@
 - final: 10 PBE0-D4/def2-TZVP OptFreq расчётов, 10 нормальных завершений;
 - финальный минимум: `multiplicity = 3`;
 - лучшая энергия: `-148.631808591174 Hartree`;
+- точечная группа выбранной структуры: `C2h`;
+- `<S²>` UKS для `best_B6.xyz`: actual `2.207087`, expected `2.000000`;
+- `E + ZPE` для `best_B6.xyz`: `-148.611885801174 Hartree`;
 - мнимые частоты у выбранной структуры: `0`;
 - минимальная ненулевая частота: `233.780000 cm-1`.
+
+Среда опубликованных ORCA-выводов: ORCA `6.1.1 RELEASE`, Linux/VPS, host `vmi3233575`.
 
 Финальная структура `best_B6.xyz`:
 
